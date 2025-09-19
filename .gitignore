@@ -1,0 +1,41 @@
+# Build directories
+/obj/
+/lib/
+/build/
+/.pybuild/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+
+# Editor files
+*~
+.*.swp
+.*.swo
+*.orig
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Debian packaging
+/debian/files
+/debian/*.debhelper
+/debian/*.debhelper.log
+/debian/*.substvars
+/debian/tmp/
+
+# Virtual environments
+venv/
+.venv/
+env/
+.env/
+

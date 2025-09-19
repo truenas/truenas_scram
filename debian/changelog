@@ -1,0 +1,7 @@
+truenas-scram (0.1.0-1) bookworm; urgency=medium
+
+  * Initial release.
+  * Add C library for TrueNAS SCRAM authentication functionality.
+  * Add Python bindings for SCRAM authentication operations.
+
+ -- Andrew Walker <andrew.walker@truenas.com>  Fri, 19 Sep 2025 11:40:00 +0000
