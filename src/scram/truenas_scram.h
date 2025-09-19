@@ -444,6 +444,36 @@ scram_resp_t scram_xor_bytes(const crypto_datum_t *a, const crypto_datum_t *b,
  */
 scram_resp_t scram_constant_time_compare(const crypto_datum_t *a, const crypto_datum_t *b,
 					bool *match, scram_error_t *error);
+
+/* Base64 encoding/decoding functions */
+
+/**
+ * @brief encode binary data to base64 string
+ *
+ * This function encodes binary data from a crypto_datum_t structure
+ * into a base64-encoded string stored in another crypto_datum_t.
+ *
+ * @param[in]		data_in - input binary data to encode
+ * @param[out]		data_out - output base64 string (caller must free with crypto_datum_clear)
+ * @param[in,out]	error - error buffer for detailed error information
+ * @return		SCRAM_E_SUCCESS on success, error code on failure
+ */
+scram_resp_t scram_base64_encode(const crypto_datum_t *data_in,
+				 crypto_datum_t *data_out, scram_error_t *error);
+
+/**
+ * @brief decode base64 string to binary data
+ *
+ * This function decodes a base64-encoded string from a crypto_datum_t
+ * structure into binary data stored in another crypto_datum_t.
+ *
+ * @param[in]		data_in - input base64 string to decode
+ * @param[out]		data_out - output binary data (caller must free with crypto_datum_clear)
+ * @param[in,out]	error - error buffer for detailed error information
+ * @return		SCRAM_E_SUCCESS on success, error code on failure
+ */
+scram_resp_t scram_base64_decode(const crypto_datum_t *data_in,
+				 crypto_datum_t *data_out, scram_error_t *error);
 /**
  * @brief free crypto_datum_t and optionally zero data
  *

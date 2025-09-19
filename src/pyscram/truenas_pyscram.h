@@ -4,7 +4,7 @@
 
 #define PY_SSIZE_T_CLEAN
 #include <Python.h>
-#include "../scram/scram.h"
+#include "../scram/truenas_scram.h"
 
 #define MODULE_NAME "truenas_pyscram"
 

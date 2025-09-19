@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-#include "scram.h"
 #include "scram_private.h"
 #include <string.h>
 #include <errno.h>

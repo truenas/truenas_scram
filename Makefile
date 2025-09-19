@@ -54,4 +54,4 @@ install: library
 	install $(LIBRARY) $(DESTDIR)$(PREFIX)/lib/
 	ln -sf libtruenas_scram.so.$(VERSION) $(DESTDIR)$(PREFIX)/lib/$(SONAME)
 	ln -sf $(SONAME) $(DESTDIR)$(PREFIX)/lib/libtruenas_scram.so
-	install -m644 $(SRCDIR)/scram.h $(DESTDIR)$(PREFIX)/include/
+	install -m644 $(SRCDIR)/truenas_scram.h $(DESTDIR)$(PREFIX)/include/
