@@ -139,6 +139,9 @@ static scram_resp_t extract_channel_binding_info(const char *channel_binding_str
 	return ret;
 }
 
+#define CFINAL_MSG_BARE_FMT "c=%.*s" SCRAM_SEP "r=%.*s"
+#define CFINAL_MSG_FMT CFINAL_MSG_BARE_FMT SCRAM_SEP "p=%.*s"
+
 scram_resp_t scram_serialize_client_final_message(scram_client_final_t *msg,
 						  char **scram_msg_str_out,
 						  scram_error_t *error)
@@ -206,10 +209,7 @@ scram_resp_t scram_serialize_client_final_message(scram_client_final_t *msg,
 		}
 
 		/* Format the client-final-message with proof: c=<channel_binding>,r=<nonce>,p=<proof> */
-		if (asprintf(scram_msg_str_out,
-			     SCRAM_ATTR_CHANNEL_BINDING "=%.*s" SCRAM_SEP
-			     SCRAM_ATTR_NONCE "=%.*s" SCRAM_SEP
-			     SCRAM_ATTR_CLIENT_PROOF "=%.*s",
+		if (asprintf(scram_msg_str_out, CFINAL_MSG_FMT,
 			     (int)channel_binding_b64.size, channel_binding_b64.data,
 			     (int)nonce_b64.size, nonce_b64.data,
 			     (int)proof_b64.size, proof_b64.data) < 0) {
@@ -220,9 +220,7 @@ scram_resp_t scram_serialize_client_final_message(scram_client_final_t *msg,
 		}
 	} else {
 		/* Format the client-final-message without proof: c=<channel_binding>,r=<nonce> */
-		if (asprintf(scram_msg_str_out,
-			     SCRAM_ATTR_CHANNEL_BINDING "=%.*s" SCRAM_SEP
-			     SCRAM_ATTR_NONCE "=%.*s",
+		if (asprintf(scram_msg_str_out, CFINAL_MSG_BARE_FMT,
 			     (int)channel_binding_b64.size, channel_binding_b64.data,
 			     (int)nonce_b64.size, nonce_b64.data) < 0) {
 			scram_set_error(error, "asprintf() failed");
@@ -240,6 +238,76 @@ scram_resp_t scram_serialize_client_final_message(scram_client_final_t *msg,
 	return ret;
 }
 
+enum final_message_parts {
+	CFINAL_MSG_CHANNEL_BINDING,
+	CFINAL_MSG_NONCE,
+	CFINAL_MSG_CLIENT_PROOF
+};
+#define CFINAL_LAST CFINAL_MSG_CLIENT_PROOF
+
+static
+scram_resp_t deserialize_message_component(char *token,
+					   int token_index,
+					   scram_client_final_t *msg,
+					   scram_error_t *error)
+{
+	char *channel_binding_str = NULL;
+	scram_attr_t attr = {0};
+	scram_resp_t ret = SCRAM_E_PARSE_ERROR;
+
+	switch(token_index) {
+	case CFINAL_MSG_CHANNEL_BINDING:
+		/* First attribute must be channel binding (c) */
+		if (strncmp(token, SCRAM_ATTR_CHANNEL_BINDING_EQ, SCRAM_ATTR_PREFIX_LEN) == 0) {
+			channel_binding_str = token + SCRAM_ATTR_PREFIX_LEN;
+		} else {
+			scram_set_error(error, "expected channel binding as first attribute");
+			return ret;
+		}
+		if (strlen(channel_binding_str) > 0) {
+			ret = extract_channel_binding_info(channel_binding_str, msg, error);
+			if (ret != SCRAM_E_SUCCESS) {
+				return ret;
+			}
+		}
+		break;
+	case CFINAL_MSG_NONCE:
+		/* Second attribute must be nonce (r) */
+		if (*token != SCRAM_ATTR_NONCE_CH) {
+			scram_set_error(error, "expected nonce as second attribute");
+			return ret;
+		}
+
+		ret = scram_attr_parse(token, &attr, error);
+		if ((ret != SCRAM_E_SUCCESS) || (attr.scram_type != ATTR_TYPE_CRYPTO_DATUM)) {
+			return ret;
+		}
+
+		msg->nonce = attr.scram_val.datum;
+		break;
+	case CFINAL_MSG_CLIENT_PROOF:
+		/* Third attribute must be client proof (p) */
+		if (*token != SCRAM_ATTR_CLIENT_PROOF_CH) {
+			scram_set_error(error, "expected client proof as third attribute");
+			return ret;
+		}
+
+		ret = scram_attr_parse(token, &attr, error);
+		if ((ret != SCRAM_E_SUCCESS) || (attr.scram_type != ATTR_TYPE_CRYPTO_DATUM)) {
+			return ret;
+		}
+
+		msg->client_proof = attr.scram_val.datum;
+		break;
+	default:
+		/* Additional attributes not expected in client-final-message */
+		scram_set_error(error, "unexpected additional attributes");
+		return ret;
+	}
+
+	return SCRAM_E_SUCCESS;
+}
+
 scram_resp_t scram_deserialize_client_final_message(const char *scram_msg_str,
 						    scram_client_final_t **msg_out,
 						    scram_error_t *error)
@@ -247,8 +315,6 @@ scram_resp_t scram_deserialize_client_final_message(const char *scram_msg_str,
 	scram_client_final_t *msg = NULL;
 	char *msg_copy = NULL;
 	char *token = NULL, *saveptr = NULL;
-	char *channel_binding_str = NULL, *nonce_str = NULL, *proof_str = NULL;
-	crypto_datum_t b64_input;
 	int token_index = 0;
 	scram_resp_t ret = SCRAM_E_INVALID_REQUEST;
 
@@ -271,68 +337,16 @@ scram_resp_t scram_deserialize_client_final_message(const char *scram_msg_str,
 	}
 
 	/* Parse comma-separated attributes - expected order: c,r,p */
-	for (token = strtok_r(msg_copy, SCRAM_SEP, &saveptr);
-	     token;
+	for (token = strtok_r(msg_copy, SCRAM_SEP, &saveptr); token;
 	     token = strtok_r(NULL, SCRAM_SEP, &saveptr), token_index++) {
-
-		if (token_index == 0) {
-			/* First attribute must be channel binding (c) */
-			if (strncmp(token, SCRAM_ATTR_CHANNEL_BINDING "=", SCRAM_ATTR_PREFIX_LEN) == 0) {
-				channel_binding_str = token + SCRAM_ATTR_PREFIX_LEN;
-			} else {
-				scram_set_error(error, "expected channel binding as first attribute");
-				goto cleanup;
-			}
-		} else if (token_index == 1) {
-			/* Second attribute must be nonce (r) */
-			if (strncmp(token, SCRAM_ATTR_NONCE "=", SCRAM_ATTR_PREFIX_LEN) == 0) {
-				nonce_str = token + SCRAM_ATTR_PREFIX_LEN;
-			} else {
-				scram_set_error(error, "expected nonce as second attribute");
-				goto cleanup;
-			}
-		} else if (token_index == 2) {
-			/* Third attribute must be client proof (p) */
-			if (strncmp(token, SCRAM_ATTR_CLIENT_PROOF "=", SCRAM_ATTR_PREFIX_LEN) == 0) {
-				proof_str = token + SCRAM_ATTR_PREFIX_LEN;
-			} else {
-				scram_set_error(error, "expected client proof as third attribute");
-				goto cleanup;
-			}
-		} else {
-			/* Additional attributes not expected in client-final-message */
-			scram_set_error(error, "unexpected additional attributes");
-			goto cleanup;
-		}
-	}
-
-	if (!channel_binding_str || !nonce_str || !proof_str) {
-		scram_set_error(error, "missing required attributes");
-		goto cleanup;
-	}
-
-	/* Extract channel binding information */
-	if (strlen(channel_binding_str) > 0) {
-		ret = extract_channel_binding_info(channel_binding_str, msg, error);
+		ret = deserialize_message_component(token, token_index, msg, error);
 		if (ret != SCRAM_E_SUCCESS) {
 			goto cleanup;
 		}
 	}
 
-	/* Decode base64 nonce */
-	b64_input.data = (unsigned char *)nonce_str;
-	b64_input.size = strlen(nonce_str);
-	ret = scram_base64_decode(&b64_input, &msg->nonce, error);
-	if (ret != SCRAM_E_SUCCESS) {
-		goto cleanup;
-	}
-
-	/* Decode base64 client proof */
-	b64_input.data = (unsigned char *)proof_str;
-	b64_input.size = strlen(proof_str);
-	ret = scram_base64_decode(&b64_input, &msg->client_proof, error);
-	if (ret != SCRAM_E_SUCCESS) {
-		crypto_datum_clear(&msg->nonce, false);
+	if (!msg->client_proof.size || !msg->nonce.size) {
+		scram_set_error(error, "missing required attributes");
 		goto cleanup;
 	}
 

@@ -12,6 +12,7 @@ truenas_pyscram_ext = Extension(
         'src/pyscram/py_client_final.c',
         'src/pyscram/py_server_final.c',
         'src/pyscram/py_scram_verify.c',
+        'src/scram/scram_attr_parse.c',
         'src/scram/scram_client_first.c',
         'src/scram/scram_utils.c',
         'src/scram/scram_server_final.c',

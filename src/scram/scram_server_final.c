@@ -10,7 +10,7 @@ scram_resp_t scram_serialize_server_final_message(const scram_server_final_t *ms
 						  scram_error_t *error)
 {
 	crypto_datum_t sig_b64 = {0};
-	int ret = 0;
+	scram_resp_t ret = 0;
 
 	if (!msg || !scram_msg_str_out) {
 		scram_set_error(error, "invalid input parameters");
@@ -24,7 +24,7 @@ scram_resp_t scram_serialize_server_final_message(const scram_server_final_t *ms
 	}
 
 	/* Format the server-final-message: v=<signature> */
-	if (asprintf(scram_msg_str_out, SCRAM_ATTR_SERVER_SIGNATURE "=%.*s",
+	if (asprintf(scram_msg_str_out, "v=%.*s",
 		     (int)sig_b64.size, sig_b64.data) < 0) {
 		scram_set_error(error, "asprintf() failed");
 		ret = SCRAM_E_MEMORY_ERROR;
@@ -43,7 +43,7 @@ scram_resp_t scram_deserialize_server_final_message(const char *scram_msg_str,
 	scram_server_final_t *msg = NULL;
 	char *signature_str = NULL;
 	crypto_datum_t b64_input;
-	int ret = SCRAM_E_INVALID_REQUEST;
+	scram_resp_t ret = SCRAM_E_INVALID_REQUEST;
 
 	if (!scram_msg_str || !msg_out) {
 		scram_set_error(error, "invalid input parameters");
@@ -57,7 +57,7 @@ scram_resp_t scram_deserialize_server_final_message(const char *scram_msg_str,
 	}
 
 	/* Parse server signature attribute: v=<signature> */
-	if (strncmp(scram_msg_str, SCRAM_ATTR_SERVER_SIGNATURE "=", SCRAM_ATTR_PREFIX_LEN) == 0) {
+	if (strncmp(scram_msg_str, SCRAM_ATTR_SERVER_SIGNATURE_EQ, SCRAM_ATTR_PREFIX_LEN) == 0) {
 		signature_str = (char *)scram_msg_str + SCRAM_ATTR_PREFIX_LEN;
 	} else {
 		scram_set_error(error, "expected server signature attribute");

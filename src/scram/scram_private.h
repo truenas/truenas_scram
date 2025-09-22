@@ -22,15 +22,20 @@ void _scram_set_error(scram_error_t *error, unsigned long ssl_err_code,
     _scram_set_error(error, ERR_get_error(), fmt, __location__, ##__VA_ARGS__)
 
 /* SCRAM attribute names from RFC 5802 section 5.1 */
-#define SCRAM_ATTR_USERNAME "n"
-#define SCRAM_ATTR_RESERVED_MEXT "m"
-#define SCRAM_ATTR_NONCE "r"
-#define SCRAM_ATTR_SALT "s"
-#define SCRAM_ATTR_ITERATION_COUNT "i"
-#define SCRAM_ATTR_CHANNEL_BINDING "c"
-#define SCRAM_ATTR_CLIENT_PROOF "p"
-#define SCRAM_ATTR_SERVER_SIGNATURE "v"
-#define SCRAM_ATTR_ERROR "e"
+#define SCRAM_ATTR(name, ch) \
+	static const char SCRAM_ATTR_##name##_STR[] = { ch, '\0' }; \
+	static const char SCRAM_ATTR_##name##_EQ[] = { ch, '=', '\0' }; \
+	static const char SCRAM_ATTR_##name##_CH = ch;
+
+SCRAM_ATTR(USERNAME, 'n')
+SCRAM_ATTR(NONCE, 'r')
+SCRAM_ATTR(SALT, 's')
+SCRAM_ATTR(ITERATION_COUNT, 'i')
+SCRAM_ATTR(CHANNEL_BINDING, 'c')
+SCRAM_ATTR(CLIENT_PROOF, 'p')
+SCRAM_ATTR(SERVER_SIGNATURE, 'v')
+SCRAM_ATTR(ERROR, 'e')
+SCRAM_ATTR(RESERVED_MEXT, 'm')
 
 /* GS2 flags from RFC 5801 */
 #define GS2_FLAG_NO_CB_SUPPORT "n"
@@ -56,4 +61,24 @@ void _scram_set_error(scram_error_t *error, unsigned long ssl_err_code,
 #define SCRAM_DEFAULT_SALT_SZ 16
 #define SCRAM_DEFAULT_PWD_SZ 64
 
+enum scram_attr_type {
+	ATTR_TYPE_NUMBER,
+	ATTR_TYPE_CRYPTO_DATUM,
+	ATTR_TYPE_PRINCIPAL,
+};
+
+typedef union scram_attr_val {
+	uint64_t number;
+	crypto_datum_t datum;
+	scram_principal_t principal;
+} scram_attr_val_t;
+
+typedef struct scram_attr {
+	enum scram_attr_type scram_type;
+	scram_attr_val_t scram_val;
+} scram_attr_t;
+
+scram_resp_t scram_attr_parse(const char *str_in,
+			      scram_attr_t *attr_out,
+			      scram_error_t *error);
 #endif /* _SCRAM_PRIVATE_H_ */
