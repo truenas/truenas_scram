@@ -33,12 +33,10 @@ typedef enum {
 
 #define SCRAM_E_LAST SCRAM_E_FAULT
 
-/* Error structure similar to pwenc_error_t */
 typedef struct {
 	char message[1024];
 } scram_error_t;
 
-/* crypto_datum_t structure - same as pwenc_datum_t */
 typedef struct {
 	unsigned char *data;
 	size_t size;
