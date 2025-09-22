@@ -166,8 +166,22 @@ scram_resp_t scram_parse_principal(char *str_in,
 
 	// We need to SASLPREP the username str and verify that it
 	// matches the raw str
+	ret = scram_saslprep(str_in,
+			     principal_out->username,
+			     sizeof(principal_out->username) -1,
+			     error);
 
-	strlcpy(principal_out->username, str_in, sizeof(principal_out->username));
+	if (ret != SCRAM_E_SUCCESS) {
+		return ret;
+	}
+
+	if (strcmp(str_in, principal_out->username) != 0) {
+		scram_set_error(error, "%s: original string does not match "
+				"scram_saslprep result: %s",
+				str_in, principal_out->username);
+		return SCRAM_E_FORMAT_ERROR;
+	}
+
 	return SCRAM_E_SUCCESS;
 }
 
@@ -176,7 +190,6 @@ scram_resp_t scram_attr_parse(const char *str_in,
 			      scram_error_t *error)
 {
 	char *attr_ident = NULL;
-	char *attr_copy = NULL;
 	char *attr_val = NULL;
 	scram_resp_t ret;
 

@@ -1,7 +1,7 @@
 CC = gcc
 CFLAGS = -Wall -Wextra -std=c99 -fPIC -O2 -g
 LDFLAGS = -shared
-LIBS = -lssl -lcrypto -lbsd
+LIBS = -lssl -lcrypto -lbsd -lidn
 PREFIX = /usr/local
 
 # Library versioning

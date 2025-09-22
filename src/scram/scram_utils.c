@@ -4,6 +4,8 @@
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <idna.h>
+#include <stringprep.h>
 #include <openssl/evp.h>
 #include <openssl/hmac.h>
 #include <openssl/rand.h>
@@ -725,5 +727,26 @@ scram_resp_t scram_base64_decode(const crypto_datum_t *data_in,
 
 	data_out->data = decoded;
 	data_out->size = decoded_len;
+	return SCRAM_E_SUCCESS;
+}
+
+scram_resp_t scram_saslprep(const char *str_in, char *buf, size_t bufsz, scram_error_t *error)
+{
+	int rc;
+
+	if (strlen(str_in) >= bufsz) {
+		scram_set_error(error, "buffer size too small for provided string");
+		return SCRAM_E_INVALID_REQUEST;
+	}
+
+	// first copy str_in to the output buffer because the stringprep API is awesome
+
+	strlcpy(buf, str_in, bufsz);
+	rc = stringprep(buf, bufsz, 0, stringprep_saslprep);
+	if (rc != STRINGPREP_OK) {
+		scram_set_error(error, "%d: stringprep_saslprep failed", rc);
+		return SCRAM_E_FAULT;
+	}
+
 	return SCRAM_E_SUCCESS;
 }

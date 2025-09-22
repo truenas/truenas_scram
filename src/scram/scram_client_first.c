@@ -231,12 +231,11 @@ scram_resp_t scram_create_client_first_message(const char *username,
 
 	/* Set API key ID and username */
 	msg->principal.api_key_id = api_key_id;
-	if (strlcpy(msg->principal.username, username,
-		    sizeof(msg->principal.username)) >=
-	    sizeof(msg->principal.username)) {
-		scram_set_error(error, "username too long");
-		free(msg);
-		return SCRAM_E_INVALID_REQUEST;
+	ret = scram_saslprep(username, msg->principal.username,
+			     sizeof(msg->principal.username),
+			     error);
+	if (ret != SCRAM_E_SUCCESS) {
+		return ret;
 	}
 
 	/* Generate client nonce */

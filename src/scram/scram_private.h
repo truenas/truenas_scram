@@ -81,4 +81,8 @@ typedef struct scram_attr {
 scram_resp_t scram_attr_parse(const char *str_in,
 			      scram_attr_t *attr_out,
 			      scram_error_t *error);
+
+scram_resp_t scram_saslprep(const char *str_in,
+			    char *buf, size_t bufsz,
+			    scram_error_t *error);
 #endif /* _SCRAM_PRIVATE_H_ */

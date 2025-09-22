@@ -20,7 +20,7 @@ truenas_pyscram_ext = Extension(
         'src/scram/scram_client_final.c'
     ],
     include_dirs=['src/scram', 'src/pyscram'],
-    libraries=['ssl', 'crypto', 'bsd']
+    libraries=['ssl', 'crypto', 'bsd', 'idn']
 )
 
 setup(
