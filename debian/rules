@@ -1,0 +1,31 @@
+#!/usr/bin/make -f
+
+#export DH_VERBOSE = 1
+export DEB_BUILD_MAINT_OPTIONS = hardening=+all
+export PYBUILD_NAME=truenas-scram
+export PYBUILD_SYSTEM=pyproject
+
+%:
+	dh $@ --with python3 --buildsystem=pybuild
+
+override_dh_auto_build:
+	# Build C library first
+	$(MAKE) -f Makefile library
+	# Then build Python extension
+	dh_auto_build
+
+override_dh_auto_install:
+	# Install C library
+	$(MAKE) -f Makefile install DESTDIR=$(CURDIR)/debian/tmp PREFIX=/usr
+	# Install Python extension
+	dh_auto_install
+
+override_dh_auto_test:
+        # Skip tests during package build
+
+override_dh_install:
+	dh_install
+	# Remove source files from Python package and keep only .so
+	find debian/python3-truenas-scram -name "*.c" -delete
+	find debian/python3-truenas-scram -name "*.h" -delete
+	find debian/python3-truenas-scram -type d -empty -delete

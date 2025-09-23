@@ -1,0 +1,3 @@
+include src/scram/*.h
+include src/pyscram/*.h
+
