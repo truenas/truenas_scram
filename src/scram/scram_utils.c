@@ -712,7 +712,7 @@ scram_resp_t scram_base64_decode(const crypto_datum_t *data_in,
 
 	decoded_len = EVP_DecodeBlock(decoded, data_in->data, (int)data_in->size);
 	if (decoded_len < 0) {
-		scram_set_ssl_error(error, "EVP_DecodeBlock() failed");
+		scram_set_ssl_error(error, "EVP_DecodeBlock()");
 		free(decoded);
 		return SCRAM_E_BASE64_ERROR;
 	}

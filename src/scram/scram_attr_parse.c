@@ -106,7 +106,7 @@ scram_resp_t scram_parse_nonce(const char *str_in,
 
 	// initially set zero since nonce may be a client (32 byte) or server (64 byte) value
 	ret = scram_parse_b64_datum(str_in, 0, datum_out, error);
-	if ((ret == SCRAM_E_SUCCESS) && ((datum_out->size != SCRAM_NONCE_SIZE) ||
+	if ((ret == SCRAM_E_SUCCESS) && ((datum_out->size != SCRAM_NONCE_SIZE) &&
 	    (datum_out->size != SCRAM_NONCE_SIZE * 2))) {
 		scram_set_error(error, "%zu: unexpected nonce size", datum_out->size);
 		crypto_datum_clear(datum_out, false);
@@ -142,10 +142,10 @@ scram_resp_t scram_parse_principal(char *str_in,
 		return SCRAM_E_INVALID_REQUEST;
 	}
 
-	api_key_id_str = strstr(str_in, "=");
+	api_key_id_str = strchr(str_in, ':');
 	if (api_key_id_str != NULL) {
-		*api_key_id_str = '\0';
-		if (*api_key_id_str++ == '\0') {
+		*api_key_id_str++ = '\0';
+		if (*api_key_id_str == '\0') {
 			scram_set_error(error,
 					"%s: expected value after separator (:)",
 					str_in);
@@ -228,7 +228,7 @@ scram_resp_t scram_attr_parse(const char *str_in,
 		}
 		break;
 	case SCRAM_ATTR_SALT_CH:
-		ret = scram_parse_b64_datum(str_in, SCRAM_DEFAULT_SALT_SZ,
+		ret = scram_parse_b64_datum(attr_val, SCRAM_DEFAULT_SALT_SZ,
 					    &attr_out->scram_val.datum,
 					    error);
 		if (ret == SCRAM_E_SUCCESS) {
