@@ -13,7 +13,7 @@ typedef struct {
 
 static int
 parse_client_final_params(PyObject *args, PyObject *kwds,
-			  client_final_params_t *params)
+			  client_final_params_t *params, const char **rfc_string)
 {
 	PyObject *client_first_obj = NULL;
 	PyObject *server_first_obj = NULL;
@@ -21,13 +21,31 @@ parse_client_final_params(PyObject *args, PyObject *kwds,
 	PyObject *stored_key_obj = NULL;
 	PyObject *channel_binding_obj = NULL;
 	static char *kwlist[] = {"client_first", "server_first", "client_key",
-				 "stored_key", "channel_binding", NULL};
+				 "stored_key", "channel_binding", "rfc_string", NULL};
 
-	if (!PyArg_ParseTupleAndKeywords(args, kwds, "OOOO|O", kwlist,
+	if (!PyArg_ParseTupleAndKeywords(args, kwds, "|$OOOOOs", kwlist,
 					 &client_first_obj, &server_first_obj,
 					 &client_key_obj, &stored_key_obj,
-					 &channel_binding_obj)) {
+					 &channel_binding_obj, rfc_string)) {
 		return -1;
+	}
+
+	/* Check for mutually exclusive parameters */
+	if (*rfc_string && client_first_obj) {
+		PyErr_SetString(PyExc_ValueError,
+				"Cannot specify both rfc_string and other parameters");
+		return -1;
+	}
+
+	if (!*rfc_string && !client_first_obj) {
+		PyErr_SetString(PyExc_ValueError,
+				"Must specify either rfc_string or message parameters");
+		return -1;
+	}
+
+	/* If rfc_string is provided, we're done parsing */
+	if (*rfc_string) {
+		return 0;
 	}
 
 	/* Validate client_first parameter */
@@ -118,12 +136,39 @@ static int
 py_client_final_init(py_client_final_t *self, PyObject *args, PyObject *kwds)
 {
 	client_final_params_t params = {0};
+	const char *rfc_string = NULL;
 	char *serialized = NULL;
 	scram_error_t error = {0};
 	scram_resp_t ret;
 
-	if (parse_client_final_params(args, kwds, &params) < 0) {
+	if (parse_client_final_params(args, kwds, &params, &rfc_string) < 0) {
 		return -1;
+	}
+
+	if (rfc_string) {
+		/* Parse from RFC string */
+		Py_BEGIN_ALLOW_THREADS
+		ret = scram_deserialize_client_final_message(rfc_string, &self->msg, &error);
+		if (ret == SCRAM_E_SUCCESS) {
+			/* Re-serialize to get a clean RFC string */
+			ret = scram_serialize_client_final_message(self->msg,
+								   &serialized, &error);
+		}
+		Py_END_ALLOW_THREADS
+
+		if (ret != SCRAM_E_SUCCESS) {
+			set_exc_from_scram(ret, &error,
+					   "Failed to parse client final message");
+			return -1;
+		}
+
+		self->rfc_string = PyUnicode_FromString(serialized);
+		free(serialized);
+		if (!self->rfc_string) {
+			return -1;
+		}
+
+		return 0;
 	}
 
 	/* Create client final message and serialize in single GIL drop */
@@ -288,25 +333,36 @@ py_client_final_str(py_client_final_t *self)
 }
 
 PyDoc_STRVAR(py_client_final__doc__,
-"ClientFinalMessage(client_first, server_first, client_key, stored_key, channel_binding=None)\n"
-"-------------------------------------------------------------------------------------------\n\n"
+"ClientFinalMessage(client_first=None, server_first=None, client_key=None, stored_key=None, channel_binding=None, rfc_string=None)\n"
+"----------------------------------------------------------------------------------------------------------------------------------\n\n"
 "SCRAM client final message as specified in RFC 5802 Section 5.1.\n\n"
 "This message contains the combined nonce, channel binding data (if any),\n"
 "and client proof for authentication. It is sent by the client in response\n"
 "to the server-first-message to prove knowledge of the password.\n\n"
 "Parameters\n"
 "----------\n"
-"client_first : ClientFirstMessage\n"
-"    The original client first message\n"
-"server_first : ServerFirstMessage\n"
-"    The server first message being responded to\n"
-"client_key : CryptoDatum\n"
-"    The client key derived from the user's credentials\n"
-"stored_key : CryptoDatum\n"
-"    The stored key derived from the client key\n"
+"client_first : ClientFirstMessage, optional\n"
+"    The original client first message.\n"
+"    Required if rfc_string is not provided.\n"
+"server_first : ServerFirstMessage, optional\n"
+"    The server first message being responded to.\n"
+"    Required if rfc_string is not provided.\n"
+"client_key : CryptoDatum, optional\n"
+"    The client key derived from the user's credentials.\n"
+"    Required if rfc_string is not provided.\n"
+"stored_key : CryptoDatum, optional\n"
+"    The stored key derived from the client key.\n"
+"    Required if rfc_string is not provided.\n"
 "channel_binding : CryptoDatum, optional\n"
 "    Channel binding data obtained from the SSL object for the encrypted\n"
-"    transport connection (None for no channel binding)\n"
+"    transport connection (None for no channel binding).\n"
+"    Only used when creating a new message (not with rfc_string).\n"
+"rfc_string : str, optional\n"
+"    RFC 5802 formatted client-final-message string to parse.\n"
+"    If provided, all other parameters must not be specified.\n\n"
+"Notes\n"
+"-----\n"
+"Either all message parameters or 'rfc_string' must be provided, but not both.\n"
 );
 
 PyTypeObject PyClientFinalMessage_Type = {

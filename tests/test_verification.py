@@ -13,33 +13,35 @@ def auth_data():
 @pytest.fixture
 def client_first():
     """Generate a client first message for testing."""
-    return truenas_pyscram.ClientFirstMessage("testuser")
+    return truenas_pyscram.ClientFirstMessage(username="testuser")
 
 
 @pytest.fixture
 def server_first(client_first, auth_data):
     """Generate a server first message for testing."""
-    return truenas_pyscram.ServerFirstMessage(client_first, auth_data.salt,
-                                              auth_data.iterations)
+    return truenas_pyscram.ServerFirstMessage(client_first=client_first,
+                                              salt=auth_data.salt,
+                                              iterations=auth_data.iterations)
 
 
 @pytest.fixture
 def client_final(client_first, server_first, auth_data):
     """Generate a client final message for testing."""
-    return truenas_pyscram.ClientFinalMessage(client_first, server_first,
-                                              auth_data.client_key,
-                                              auth_data.stored_key)
+    return truenas_pyscram.ClientFinalMessage(client_first=client_first,
+                                              server_first=server_first,
+                                              client_key=auth_data.client_key,
+                                              stored_key=auth_data.stored_key)
 
 
 @pytest.fixture
 def server_final(client_first, server_first, client_final, auth_data):
     """Generate a server final message for testing."""
     return truenas_pyscram.ServerFinalMessage(
-        client_first,
-        server_first,
-        client_final,
-        auth_data.stored_key,
-        auth_data.server_key
+        client_first=client_first,
+        server_first=server_first,
+        client_final=client_final,
+        stored_key=auth_data.stored_key,
+        server_key=auth_data.server_key
     )
 
 
@@ -48,7 +50,8 @@ def test_verify_client_final_message_success(client_first, server_first,
     """Test successful client final message verification."""
     # Should not raise an exception
     truenas_pyscram.verify_client_final_message(
-        client_first, server_first, client_final, auth_data.stored_key)
+        client_first=client_first, server_first=server_first,
+        client_final=client_final, stored_key=auth_data.stored_key)
 
 
 def test_verify_server_signature_success(client_first, server_first,
@@ -56,8 +59,9 @@ def test_verify_server_signature_success(client_first, server_first,
     """Test successful server signature verification."""
     # Should not raise an exception
     truenas_pyscram.verify_server_signature(
-        client_first, server_first, client_final, server_final,
-        auth_data.server_key)
+        client_first=client_first, server_first=server_first,
+        client_final=client_final, server_final=server_final,
+        server_key=auth_data.server_key)
 
 
 def test_verify_client_final_message_with_wrong_key(client_first, server_first,
@@ -67,8 +71,8 @@ def test_verify_client_final_message_with_wrong_key(client_first, server_first,
 
     with pytest.raises(truenas_pyscram.ScramError, match="SCRAM_E_AUTH_FAILED"):
         truenas_pyscram.verify_client_final_message(
-            client_first, server_first, client_final,
-            wrong_auth_data.stored_key)
+            client_first=client_first, server_first=server_first,
+            client_final=client_final, stored_key=wrong_auth_data.stored_key)
 
 
 def test_verify_server_signature_with_wrong_key(client_first, server_first,
@@ -78,8 +82,9 @@ def test_verify_server_signature_with_wrong_key(client_first, server_first,
 
     with pytest.raises(truenas_pyscram.ScramError, match="SCRAM_E_AUTH_FAILED"):
         truenas_pyscram.verify_server_signature(
-            client_first, server_first, client_final, server_final,
-            wrong_auth_data.server_key)
+            client_first=client_first, server_first=server_first,
+            client_final=client_final, server_final=server_final,
+            server_key=wrong_auth_data.server_key)
 
 
 @pytest.mark.parametrize("invalid_param,param_name,expected_error", [
@@ -97,7 +102,8 @@ def test_verify_client_final_message_invalid_client_first(server_first,
     """Test client final message verification with invalid client_first."""
     with pytest.raises(TypeError, match=expected_error):
         truenas_pyscram.verify_client_final_message(
-            invalid_param, server_first, client_final, auth_data.stored_key)
+            client_first=invalid_param, server_first=server_first,
+            client_final=client_final, stored_key=auth_data.stored_key)
 
 
 @pytest.mark.parametrize("invalid_param,param_name,expected_error", [
@@ -115,7 +121,8 @@ def test_verify_client_final_message_invalid_server_first(client_first,
     """Test client final message verification with invalid server_first."""
     with pytest.raises(TypeError, match=expected_error):
         truenas_pyscram.verify_client_final_message(
-            client_first, invalid_param, client_final, auth_data.stored_key)
+            client_first=client_first, server_first=invalid_param,
+            client_final=client_final, stored_key=auth_data.stored_key)
 
 
 @pytest.mark.parametrize("invalid_param,param_name,expected_error", [
@@ -133,7 +140,8 @@ def test_verify_client_final_message_invalid_client_final(client_first,
     """Test client final message verification with invalid client_final."""
     with pytest.raises(TypeError, match=expected_error):
         truenas_pyscram.verify_client_final_message(
-            client_first, server_first, invalid_param, auth_data.stored_key)
+            client_first=client_first, server_first=server_first,
+            client_final=invalid_param, stored_key=auth_data.stored_key)
 
 
 @pytest.mark.parametrize("invalid_param,param_name,expected_error", [
@@ -151,7 +159,8 @@ def test_verify_client_final_message_invalid_stored_key(client_first,
     """Test client final message verification with invalid stored_key."""
     with pytest.raises(TypeError, match=expected_error):
         truenas_pyscram.verify_client_final_message(
-            client_first, server_first, client_final, invalid_param)
+            client_first=client_first, server_first=server_first,
+            client_final=client_final, stored_key=invalid_param)
 
 
 @pytest.mark.parametrize("invalid_param,param_name,expected_error", [
@@ -170,8 +179,9 @@ def test_verify_server_signature_invalid_client_first(server_first,
     """Test server signature verification with invalid client_first."""
     with pytest.raises(TypeError, match=expected_error):
         truenas_pyscram.verify_server_signature(
-            invalid_param, server_first, client_final, server_final,
-            auth_data.server_key)
+            client_first=invalid_param, server_first=server_first,
+            client_final=client_final, server_final=server_final,
+            server_key=auth_data.server_key)
 
 
 @pytest.mark.parametrize("invalid_param,param_name,expected_error", [
@@ -190,8 +200,9 @@ def test_verify_server_signature_invalid_server_first(client_first,
     """Test server signature verification with invalid server_first."""
     with pytest.raises(TypeError, match=expected_error):
         truenas_pyscram.verify_server_signature(
-            client_first, invalid_param, client_final, server_final,
-            auth_data.server_key)
+            client_first=client_first, server_first=invalid_param,
+            client_final=client_final, server_final=server_final,
+            server_key=auth_data.server_key)
 
 
 @pytest.mark.parametrize("invalid_param,param_name,expected_error", [
@@ -210,8 +221,9 @@ def test_verify_server_signature_invalid_client_final(client_first,
     """Test server signature verification with invalid client_final."""
     with pytest.raises(TypeError, match=expected_error):
         truenas_pyscram.verify_server_signature(
-            client_first, server_first, invalid_param, server_final,
-            auth_data.server_key)
+            client_first=client_first, server_first=server_first,
+            client_final=invalid_param, server_final=server_final,
+            server_key=auth_data.server_key)
 
 
 @pytest.mark.parametrize("invalid_param,param_name,expected_error", [
@@ -230,8 +242,9 @@ def test_verify_server_signature_invalid_server_final(client_first,
     """Test server signature verification with invalid server_final."""
     with pytest.raises(TypeError, match=expected_error):
         truenas_pyscram.verify_server_signature(
-            client_first, server_first, client_final, invalid_param,
-            auth_data.server_key)
+            client_first=client_first, server_first=server_first,
+            client_final=client_final, server_final=invalid_param,
+            server_key=auth_data.server_key)
 
 
 @pytest.mark.parametrize("invalid_param,param_name,expected_error", [
@@ -250,56 +263,67 @@ def test_verify_server_signature_invalid_server_key(client_first,
     """Test server signature verification with invalid server_key."""
     with pytest.raises(TypeError, match=expected_error):
         truenas_pyscram.verify_server_signature(
-            client_first, server_first, client_final, server_final,
-            invalid_param)
+            client_first=client_first, server_first=server_first,
+            client_final=client_final, server_final=server_final,
+            server_key=invalid_param)
 
 
 def test_verification_functions_with_channel_binding(auth_data):
     """Test verification functions with channel binding."""
     # Create client with channel binding
     client_first = truenas_pyscram.ClientFirstMessage(
-        "testuser", gs2_header="p=tls-unique")
+        username="testuser", gs2_header="p=tls-unique")
     server_first = truenas_pyscram.ServerFirstMessage(
-        client_first, auth_data.salt, auth_data.iterations)
+        client_first=client_first, salt=auth_data.salt,
+        iterations=auth_data.iterations)
 
     # Create channel binding data
     channel_binding = truenas_pyscram.CryptoDatum(b"fake_channel_binding_data")
 
     client_final = truenas_pyscram.ClientFinalMessage(
-        client_first, server_first, auth_data.client_key,
-        auth_data.stored_key, channel_binding)
+        client_first=client_first, server_first=server_first,
+        client_key=auth_data.client_key, stored_key=auth_data.stored_key,
+        channel_binding=channel_binding)
     server_final = truenas_pyscram.ServerFinalMessage(
-        client_first, server_first, client_final,
-        auth_data.stored_key, auth_data.server_key)
+        client_first=client_first, server_first=server_first,
+        client_final=client_final, stored_key=auth_data.stored_key,
+        server_key=auth_data.server_key)
 
     # Both verifications should succeed
     truenas_pyscram.verify_client_final_message(
-        client_first, server_first, client_final, auth_data.stored_key)
+        client_first=client_first, server_first=server_first,
+        client_final=client_final, stored_key=auth_data.stored_key)
     truenas_pyscram.verify_server_signature(
-        client_first, server_first, client_final, server_final,
-        auth_data.server_key)
+        client_first=client_first, server_first=server_first,
+        client_final=client_final, server_final=server_final,
+        server_key=auth_data.server_key)
 
 
 def test_full_scram_flow_with_verification(auth_data):
     """Test complete SCRAM flow with verification."""
     # Complete SCRAM flow
-    client_first = truenas_pyscram.ClientFirstMessage("testuser")
+    client_first = truenas_pyscram.ClientFirstMessage(username="testuser")
     server_first = truenas_pyscram.ServerFirstMessage(
-        client_first, auth_data.salt, auth_data.iterations)
+        client_first=client_first, salt=auth_data.salt,
+        iterations=auth_data.iterations)
     client_final = truenas_pyscram.ClientFinalMessage(
-        client_first, server_first, auth_data.client_key, auth_data.stored_key)
+        client_first=client_first, server_first=server_first,
+        client_key=auth_data.client_key, stored_key=auth_data.stored_key)
     server_final = truenas_pyscram.ServerFinalMessage(
-        client_first, server_first, client_final,
-        auth_data.stored_key, auth_data.server_key)
+        client_first=client_first, server_first=server_first,
+        client_final=client_final, stored_key=auth_data.stored_key,
+        server_key=auth_data.server_key)
 
     # Server verifies client final message (server-side verification)
     truenas_pyscram.verify_client_final_message(
-        client_first, server_first, client_final, auth_data.stored_key)
+        client_first=client_first, server_first=server_first,
+        client_final=client_final, stored_key=auth_data.stored_key)
 
     # Client verifies server signature (client-side verification)
     truenas_pyscram.verify_server_signature(
-        client_first, server_first, client_final, server_final,
-        auth_data.server_key)
+        client_first=client_first, server_first=server_first,
+        client_final=client_final, server_final=server_final,
+        server_key=auth_data.server_key)
 
 
 @pytest.mark.parametrize("username,api_key_id", [
@@ -310,42 +334,52 @@ def test_full_scram_flow_with_verification(auth_data):
 def test_verification_with_parametrized_clients(auth_data, username,
                                                api_key_id):
     """Test verification functions with parametrized client configurations."""
-    client = truenas_pyscram.ClientFirstMessage(username,
+    client = truenas_pyscram.ClientFirstMessage(username=username,
                                                 api_key_id=api_key_id)
     server_first = truenas_pyscram.ServerFirstMessage(
-        client, auth_data.salt, auth_data.iterations)
+        client_first=client, salt=auth_data.salt,
+        iterations=auth_data.iterations)
     client_final = truenas_pyscram.ClientFinalMessage(
-        client, server_first, auth_data.client_key, auth_data.stored_key)
+        client_first=client, server_first=server_first,
+        client_key=auth_data.client_key, stored_key=auth_data.stored_key)
     server_final = truenas_pyscram.ServerFinalMessage(
-        client, server_first, client_final,
-        auth_data.stored_key, auth_data.server_key)
+        client_first=client, server_first=server_first,
+        client_final=client_final, stored_key=auth_data.stored_key,
+        server_key=auth_data.server_key)
 
     # Both verifications should succeed regardless of client configuration
     truenas_pyscram.verify_client_final_message(
-        client, server_first, client_final, auth_data.stored_key)
+        client_first=client, server_first=server_first,
+        client_final=client_final, stored_key=auth_data.stored_key)
     truenas_pyscram.verify_server_signature(
-        client, server_first, client_final, server_final,
-        auth_data.server_key)
+        client_first=client, server_first=server_first,
+        client_final=client_final, server_final=server_final,
+        server_key=auth_data.server_key)
 
 
 def test_verification_functions_return_none():
     """Test that verification functions return None on success."""
     auth_data = truenas_pyscram.generate_scram_auth_data()
-    client_first = truenas_pyscram.ClientFirstMessage("testuser")
+    client_first = truenas_pyscram.ClientFirstMessage(username="testuser")
     server_first = truenas_pyscram.ServerFirstMessage(
-        client_first, auth_data.salt, auth_data.iterations)
+        client_first=client_first, salt=auth_data.salt,
+        iterations=auth_data.iterations)
     client_final = truenas_pyscram.ClientFinalMessage(
-        client_first, server_first, auth_data.client_key, auth_data.stored_key)
+        client_first=client_first, server_first=server_first,
+        client_key=auth_data.client_key, stored_key=auth_data.stored_key)
     server_final = truenas_pyscram.ServerFinalMessage(
-        client_first, server_first, client_final,
-        auth_data.stored_key, auth_data.server_key)
+        client_first=client_first, server_first=server_first,
+        client_final=client_final, stored_key=auth_data.stored_key,
+        server_key=auth_data.server_key)
 
     # Both functions should return None on success
     result1 = truenas_pyscram.verify_client_final_message(
-        client_first, server_first, client_final, auth_data.stored_key)
+        client_first=client_first, server_first=server_first,
+        client_final=client_final, stored_key=auth_data.stored_key)
     result2 = truenas_pyscram.verify_server_signature(
-        client_first, server_first, client_final, server_final,
-        auth_data.server_key)
+        client_first=client_first, server_first=server_first,
+        client_final=client_final, server_final=server_final,
+        server_key=auth_data.server_key)
 
     assert result1 is None
     assert result2 is None
@@ -354,18 +388,21 @@ def test_verification_functions_return_none():
 def test_scram_error_properties():
     """Test that ScramError has correct properties."""
     auth_data = truenas_pyscram.generate_scram_auth_data()
-    client_first = truenas_pyscram.ClientFirstMessage("testuser")
+    client_first = truenas_pyscram.ClientFirstMessage(username="testuser")
     server_first = truenas_pyscram.ServerFirstMessage(
-        client_first, auth_data.salt, auth_data.iterations)
+        client_first=client_first, salt=auth_data.salt,
+        iterations=auth_data.iterations)
     client_final = truenas_pyscram.ClientFinalMessage(
-        client_first, server_first, auth_data.client_key, auth_data.stored_key)
+        client_first=client_first, server_first=server_first,
+        client_key=auth_data.client_key, stored_key=auth_data.stored_key)
 
     # Use wrong key to trigger SCRAM authentication failure
     wrong_auth = truenas_pyscram.generate_scram_auth_data()
 
     with pytest.raises(truenas_pyscram.ScramError) as exc_info:
         truenas_pyscram.verify_client_final_message(
-            client_first, server_first, client_final, wrong_auth.stored_key)
+            client_first=client_first, server_first=server_first,
+            client_final=client_final, stored_key=wrong_auth.stored_key)
 
     # Check that the exception has the expected attributes
     exc = exc_info.value

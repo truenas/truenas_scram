@@ -7,7 +7,7 @@ import truenas_pyscram
 
 def test_client_first_message_creation():
     """Test that ClientFirstMessage can be created with username."""
-    msg = truenas_pyscram.ClientFirstMessage("testuser")
+    msg = truenas_pyscram.ClientFirstMessage(username="testuser")
     assert msg.username == "testuser"
     assert msg.api_key_id == 0
     assert msg.gs2_header is None
@@ -16,7 +16,7 @@ def test_client_first_message_creation():
 
 def test_client_first_message_with_api_key():
     """Test ClientFirstMessage creation with API key ID."""
-    msg = truenas_pyscram.ClientFirstMessage("testuser", api_key_id=12345)
+    msg = truenas_pyscram.ClientFirstMessage(username="testuser", api_key_id=12345)
     assert msg.username == "testuser"
     assert msg.api_key_id == 12345
     assert msg.gs2_header is None
@@ -25,7 +25,7 @@ def test_client_first_message_with_api_key():
 def test_client_first_message_with_gs2_header():
     """Test ClientFirstMessage creation with GS2 header."""
     gs2_header = "n"  # Standard GS2 header for no channel binding
-    msg = truenas_pyscram.ClientFirstMessage("testuser", gs2_header=gs2_header)
+    msg = truenas_pyscram.ClientFirstMessage(username="testuser", gs2_header=gs2_header)
     assert msg.username == "testuser"
     assert msg.api_key_id == 0
     assert msg.gs2_header == gs2_header
@@ -34,7 +34,7 @@ def test_client_first_message_with_gs2_header():
 def test_client_first_message_with_all_parameters():
     """Test ClientFirstMessage creation with all parameters."""
     msg = truenas_pyscram.ClientFirstMessage(
-        "testuser",
+        username="testuser",
         api_key_id=999,
         gs2_header="n"
     )
@@ -45,7 +45,7 @@ def test_client_first_message_with_all_parameters():
 
 def test_client_first_message_nonce_properties():
     """Test that the client nonce has expected properties."""
-    msg = truenas_pyscram.ClientFirstMessage("testuser")
+    msg = truenas_pyscram.ClientFirstMessage(username="testuser")
 
     # Nonce should be a CryptoDatum
     assert isinstance(msg.nonce, truenas_pyscram.CryptoDatum)
@@ -61,8 +61,8 @@ def test_client_first_message_nonce_properties():
 
 def test_client_first_message_nonce_randomness():
     """Test that different messages have different nonces."""
-    msg1 = truenas_pyscram.ClientFirstMessage("testuser")
-    msg2 = truenas_pyscram.ClientFirstMessage("testuser")
+    msg1 = truenas_pyscram.ClientFirstMessage(username="testuser")
+    msg2 = truenas_pyscram.ClientFirstMessage(username="testuser")
 
     # Nonces should be different (extremely unlikely to be same with crypto)
     assert msg1.nonce != msg2.nonce
@@ -70,7 +70,7 @@ def test_client_first_message_nonce_randomness():
 
 def test_client_first_message_serialization():
     """Test that ClientFirstMessage can be serialized to string."""
-    msg = truenas_pyscram.ClientFirstMessage("testuser")
+    msg = truenas_pyscram.ClientFirstMessage(username="testuser")
 
     # Should be able to convert to string
     serialized = str(msg)
@@ -83,7 +83,7 @@ def test_client_first_message_serialization():
 
 def test_client_first_message_serialization_with_api_key():
     """Test serialization with API key ID includes colon delimiter."""
-    msg = truenas_pyscram.ClientFirstMessage("testuser", api_key_id=123)
+    msg = truenas_pyscram.ClientFirstMessage(username="testuser", api_key_id=123)
     serialized = str(msg)
 
     # Should contain username with colon delimiter for API key
@@ -92,7 +92,7 @@ def test_client_first_message_serialization_with_api_key():
 
 def test_client_first_message_repr():
     """Test ClientFirstMessage repr format."""
-    msg = truenas_pyscram.ClientFirstMessage("testuser", api_key_id=456)
+    msg = truenas_pyscram.ClientFirstMessage(username="testuser", api_key_id=456)
     repr_str = repr(msg)
 
     assert "ClientFirstMessage" in repr_str
@@ -102,14 +102,14 @@ def test_client_first_message_repr():
 
 def test_client_first_message_type():
     """Test that ClientFirstMessage returns expected type."""
-    msg = truenas_pyscram.ClientFirstMessage("testuser")
+    msg = truenas_pyscram.ClientFirstMessage(username="testuser")
     assert type(msg).__name__ == "ClientFirstMessage"
 
 
 def test_client_first_message_with_empty_username():
     """Test ClientFirstMessage with empty username."""
     # Empty username should still work (validation is handled by C library)
-    msg = truenas_pyscram.ClientFirstMessage("")
+    msg = truenas_pyscram.ClientFirstMessage(username="")
     assert msg.username == ""
     assert isinstance(msg.nonce, truenas_pyscram.CryptoDatum)
 
@@ -117,7 +117,7 @@ def test_client_first_message_with_empty_username():
 def test_client_first_message_multiple_creation():
     """Test creating multiple ClientFirstMessage instances."""
     messages = [
-        truenas_pyscram.ClientFirstMessage(f"user{i}", api_key_id=i)
+        truenas_pyscram.ClientFirstMessage(username=f"user{i}", api_key_id=i)
         for i in range(5)
     ]
 
@@ -135,7 +135,7 @@ def test_client_first_message_multiple_creation():
 
 def test_client_first_rfc5802_format_no_gs2():
     """Test str() output matches actual serialization behavior."""
-    msg = truenas_pyscram.ClientFirstMessage("alice")
+    msg = truenas_pyscram.ClientFirstMessage(username="alice")
     serialized = str(msg)
 
     # Current behavior: default GS2 header "n,," is added
@@ -160,7 +160,7 @@ def test_client_first_rfc5802_format_no_gs2():
 
 def test_client_first_rfc5802_format_with_api_key():
     """Test RFC 5802 format with API key ID."""
-    msg = truenas_pyscram.ClientFirstMessage("bob", api_key_id=456)
+    msg = truenas_pyscram.ClientFirstMessage(username="bob", api_key_id=456)
     serialized = str(msg)
 
     # Default GS2 header is added
@@ -183,7 +183,7 @@ def test_client_first_rfc5802_format_with_api_key():
 
 def test_client_first_rfc5802_gs2_header():
     """Test proper RFC 5802 GS2 header behavior."""
-    msg = truenas_pyscram.ClientFirstMessage("charlie", gs2_header="n")
+    msg = truenas_pyscram.ClientFirstMessage(username="charlie", gs2_header="n")
     serialized = str(msg)
 
     # Should now properly format: gs2-header + separator + attributes
@@ -208,7 +208,7 @@ def test_client_first_rfc5802_gs2_header():
 
 def test_client_first_api_key_with_gs2_header():
     """Test API key handling with explicit GS2 header."""
-    msg = truenas_pyscram.ClientFirstMessage("dave", api_key_id=789,
+    msg = truenas_pyscram.ClientFirstMessage(username="dave", api_key_id=789,
                                              gs2_header="n")
     serialized = str(msg)
 
@@ -230,7 +230,7 @@ def test_client_first_api_key_with_gs2_header():
 
 def test_client_first_message_attributes_parsing():
     """Test that we can extract username and nonce from serialized form."""
-    msg = truenas_pyscram.ClientFirstMessage("eve", api_key_id=999)
+    msg = truenas_pyscram.ClientFirstMessage(username="eve", api_key_id=999)
     serialized = str(msg)
 
     # For messages without explicit GS2 header, we get proper separator

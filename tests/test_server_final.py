@@ -16,33 +16,35 @@ def auth_data():
 @pytest.fixture
 def client_first():
     """Generate a client first message for testing."""
-    return truenas_pyscram.ClientFirstMessage("testuser")
+    return truenas_pyscram.ClientFirstMessage(username="testuser")
 
 
 @pytest.fixture
 def server_first(client_first, auth_data):
     """Generate a server first message for testing."""
-    return truenas_pyscram.ServerFirstMessage(client_first, auth_data.salt,
-                                              auth_data.iterations)
+    return truenas_pyscram.ServerFirstMessage(client_first=client_first,
+                                              salt=auth_data.salt,
+                                              iterations=auth_data.iterations)
 
 
 @pytest.fixture
 def client_final(client_first, server_first, auth_data):
     """Generate a client final message for testing."""
-    return truenas_pyscram.ClientFinalMessage(client_first, server_first,
-                                              auth_data.client_key,
-                                              auth_data.stored_key)
+    return truenas_pyscram.ClientFinalMessage(client_first=client_first,
+                                              server_first=server_first,
+                                              client_key=auth_data.client_key,
+                                              stored_key=auth_data.stored_key)
 
 
 def test_server_final_message_creation(client_first, server_first,
                                        client_final, auth_data):
     """Test that ServerFinalMessage can be created."""
     msg = truenas_pyscram.ServerFinalMessage(
-        client_first,
-        server_first,
-        client_final,
-        auth_data.stored_key,
-        auth_data.server_key
+        client_first=client_first,
+        server_first=server_first,
+        client_final=client_final,
+        stored_key=auth_data.stored_key,
+        server_key=auth_data.server_key
     )
     assert isinstance(msg.signature, truenas_pyscram.CryptoDatum)
 
@@ -51,11 +53,11 @@ def test_server_final_message_signature_property(client_first, server_first,
                                                  client_final, auth_data):
     """Test that signature property returns valid server signature."""
     msg = truenas_pyscram.ServerFinalMessage(
-        client_first,
-        server_first,
-        client_final,
-        auth_data.stored_key,
-        auth_data.server_key
+        client_first=client_first,
+        server_first=server_first,
+        client_final=client_final,
+        stored_key=auth_data.stored_key,
+        server_key=auth_data.server_key
     )
     assert isinstance(msg.signature, truenas_pyscram.CryptoDatum)
     # Server signature should be 64 bytes (SHA-512)
@@ -66,11 +68,11 @@ def test_server_final_message_str_format(client_first, server_first,
                                          client_final, auth_data):
     """Test that str() returns RFC 5802 formatted message."""
     msg = truenas_pyscram.ServerFinalMessage(
-        client_first,
-        server_first,
-        client_final,
-        auth_data.stored_key,
-        auth_data.server_key
+        client_first=client_first,
+        server_first=server_first,
+        client_final=client_final,
+        stored_key=auth_data.stored_key,
+        server_key=auth_data.server_key
     )
 
     msg_str = str(msg)
@@ -84,11 +86,11 @@ def test_server_final_message_str_components(client_first, server_first,
                                              client_final, auth_data):
     """Test that str() contains correct base64-encoded signature."""
     msg = truenas_pyscram.ServerFinalMessage(
-        client_first,
-        server_first,
-        client_final,
-        auth_data.stored_key,
-        auth_data.server_key
+        client_first=client_first,
+        server_first=server_first,
+        client_final=client_final,
+        stored_key=auth_data.stored_key,
+        server_key=auth_data.server_key
     )
 
     msg_str = str(msg)
@@ -115,11 +117,11 @@ def test_server_final_message_invalid_client_first(server_first, client_final,
     """Test ServerFinalMessage with invalid client_first parameter."""
     with pytest.raises(TypeError, match=expected_error):
         truenas_pyscram.ServerFinalMessage(
-            invalid_client_first,
-            server_first,
-            client_final,
-            auth_data.stored_key,
-            auth_data.server_key
+            client_first=invalid_client_first,
+            server_first=server_first,
+            client_final=client_final,
+            stored_key=auth_data.stored_key,
+            server_key=auth_data.server_key
         )
 
 
@@ -136,11 +138,11 @@ def test_server_final_message_invalid_server_first(client_first, client_final,
     """Test ServerFinalMessage with invalid server_first parameter."""
     with pytest.raises(TypeError, match=expected_error):
         truenas_pyscram.ServerFinalMessage(
-            client_first,
-            invalid_server_first,
-            client_final,
-            auth_data.stored_key,
-            auth_data.server_key
+            client_first=client_first,
+            server_first=invalid_server_first,
+            client_final=client_final,
+            stored_key=auth_data.stored_key,
+            server_key=auth_data.server_key
         )
 
 
@@ -157,11 +159,11 @@ def test_server_final_message_invalid_client_final(client_first, server_first,
     """Test ServerFinalMessage with invalid client_final parameter."""
     with pytest.raises(TypeError, match=expected_error):
         truenas_pyscram.ServerFinalMessage(
-            client_first,
-            server_first,
-            invalid_client_final,
-            auth_data.stored_key,
-            auth_data.server_key
+            client_first=client_first,
+            server_first=server_first,
+            client_final=invalid_client_final,
+            stored_key=auth_data.stored_key,
+            server_key=auth_data.server_key
         )
 
 
@@ -203,11 +205,11 @@ def test_server_final_message_different_auth_data(client_first, server_first,
     messages = []
     for auth_data in auth_data_sets:
         msg = truenas_pyscram.ServerFinalMessage(
-            client_first,
-            server_first,
-            client_final,
-            auth_data.stored_key,
-            auth_data.server_key
+            client_first=client_first,
+            server_first=server_first,
+            client_final=client_final,
+            stored_key=auth_data.stored_key,
+            server_key=auth_data.server_key
         )
         messages.append(msg)
 
@@ -222,17 +224,21 @@ def test_server_final_message_consistent_with_same_auth(client_first,
     """Test that ServerFinalMessage is consistent with same auth data."""
     # Create two client final messages with same auth data
     client_final1 = truenas_pyscram.ClientFinalMessage(
-        client_first, server_first, auth_data.client_key, auth_data.stored_key)
+        client_first=client_first, server_first=server_first,
+        client_key=auth_data.client_key, stored_key=auth_data.stored_key)
     client_final2 = truenas_pyscram.ClientFinalMessage(
-        client_first, server_first, auth_data.client_key, auth_data.stored_key)
+        client_first=client_first, server_first=server_first,
+        client_key=auth_data.client_key, stored_key=auth_data.stored_key)
 
     # Create server final messages
     server_final1 = truenas_pyscram.ServerFinalMessage(
-        client_first, server_first, client_final1,
-        auth_data.stored_key, auth_data.server_key)
+        client_first=client_first, server_first=server_first,
+        client_final=client_final1, stored_key=auth_data.stored_key,
+        server_key=auth_data.server_key)
     server_final2 = truenas_pyscram.ServerFinalMessage(
-        client_first, server_first, client_final2,
-        auth_data.stored_key, auth_data.server_key)
+        client_first=client_first, server_first=server_first,
+        client_final=client_final2, stored_key=auth_data.stored_key,
+        server_key=auth_data.server_key)
 
     # Server signatures should be the same (same auth message)
     assert bytes(server_final1.signature) == bytes(server_final2.signature)
@@ -242,20 +248,23 @@ def test_server_final_message_different_clients(auth_data):
     """Test ServerFinalMessage with different client configurations."""
     # Create different clients
     clients = [
-        truenas_pyscram.ClientFirstMessage("user1"),
-        truenas_pyscram.ClientFirstMessage("user2", api_key_id=123),
-        truenas_pyscram.ClientFirstMessage("admin", api_key_id=999),
+        truenas_pyscram.ClientFirstMessage(username="user1"),
+        truenas_pyscram.ClientFirstMessage(username="user2", api_key_id=123),
+        truenas_pyscram.ClientFirstMessage(username="admin", api_key_id=999),
     ]
 
     messages = []
     for client in clients:
         server_first = truenas_pyscram.ServerFirstMessage(
-            client, auth_data.salt, auth_data.iterations)
+            client_first=client, salt=auth_data.salt,
+            iterations=auth_data.iterations)
         client_final = truenas_pyscram.ClientFinalMessage(
-            client, server_first, auth_data.client_key, auth_data.stored_key)
+            client_first=client, server_first=server_first,
+            client_key=auth_data.client_key, stored_key=auth_data.stored_key)
         server_final = truenas_pyscram.ServerFinalMessage(
-            client, server_first, client_final,
-            auth_data.stored_key, auth_data.server_key)
+            client_first=client, server_first=server_first,
+            client_final=client_final, stored_key=auth_data.stored_key,
+            server_key=auth_data.server_key)
         messages.append(server_final)
 
     # All should be valid but have different signatures (different auth messages)  # noqa: E501
@@ -272,29 +281,34 @@ def test_server_final_message_with_channel_binding(auth_data):
     """Test ServerFinalMessage with channel binding."""
     # Create client with channel binding
     client_first = truenas_pyscram.ClientFirstMessage(
-        "testuser", gs2_header="p=tls-unique")
+        username="testuser", gs2_header="p=tls-unique")
     server_first = truenas_pyscram.ServerFirstMessage(
-        client_first, auth_data.salt, auth_data.iterations)
+        client_first=client_first, salt=auth_data.salt,
+        iterations=auth_data.iterations)
 
     # Create channel binding data
     channel_binding = truenas_pyscram.CryptoDatum(b"fake_channel_binding_data")
 
     client_final = truenas_pyscram.ClientFinalMessage(
-        client_first, server_first, auth_data.client_key,
-        auth_data.stored_key, channel_binding)
+        client_first=client_first, server_first=server_first,
+        client_key=auth_data.client_key, stored_key=auth_data.stored_key,
+        channel_binding=channel_binding)
     server_final = truenas_pyscram.ServerFinalMessage(
-        client_first, server_first, client_final,
-        auth_data.stored_key, auth_data.server_key)
+        client_first=client_first, server_first=server_first,
+        client_final=client_final, stored_key=auth_data.stored_key,
+        server_key=auth_data.server_key)
 
     assert isinstance(server_final.signature, truenas_pyscram.CryptoDatum)
     assert len(bytes(server_final.signature)) == 64
 
     # Should produce different signature than without channel binding
     client_final_no_cb = truenas_pyscram.ClientFinalMessage(
-        client_first, server_first, auth_data.client_key, auth_data.stored_key)
+        client_first=client_first, server_first=server_first,
+        client_key=auth_data.client_key, stored_key=auth_data.stored_key)
     server_final_no_cb = truenas_pyscram.ServerFinalMessage(
-        client_first, server_first, client_final_no_cb,
-        auth_data.stored_key, auth_data.server_key)
+        client_first=client_first, server_first=server_first,
+        client_final=client_final_no_cb, stored_key=auth_data.stored_key,
+        server_key=auth_data.server_key)
 
     assert bytes(server_final.signature) != bytes(server_final_no_cb.signature)
 
@@ -302,14 +316,17 @@ def test_server_final_message_with_channel_binding(auth_data):
 def test_server_final_message_full_scram_flow(auth_data):
     """Test ServerFinalMessage in complete SCRAM authentication flow."""
     # Complete SCRAM flow
-    client_first = truenas_pyscram.ClientFirstMessage("testuser")
+    client_first = truenas_pyscram.ClientFirstMessage(username="testuser")
     server_first = truenas_pyscram.ServerFirstMessage(
-        client_first, auth_data.salt, auth_data.iterations)
+        client_first=client_first, salt=auth_data.salt,
+        iterations=auth_data.iterations)
     client_final = truenas_pyscram.ClientFinalMessage(
-        client_first, server_first, auth_data.client_key, auth_data.stored_key)
+        client_first=client_first, server_first=server_first,
+        client_key=auth_data.client_key, stored_key=auth_data.stored_key)
     server_final = truenas_pyscram.ServerFinalMessage(
-        client_first, server_first, client_final,
-        auth_data.stored_key, auth_data.server_key)
+        client_first=client_first, server_first=server_first,
+        client_final=client_final, stored_key=auth_data.stored_key,
+        server_key=auth_data.server_key)
 
     # Verify all messages are properly formatted
     assert str(client_first).startswith("n,,n=testuser,r=")
@@ -331,15 +348,18 @@ def test_server_final_message_full_scram_flow(auth_data):
 def test_server_final_message_parametrized_clients(auth_data, username,
                                                    api_key_id):
     """Test ServerFinalMessage with parametrized client configurations."""
-    client = truenas_pyscram.ClientFirstMessage(username,
+    client = truenas_pyscram.ClientFirstMessage(username=username,
                                                 api_key_id=api_key_id)
     server_first = truenas_pyscram.ServerFirstMessage(
-        client, auth_data.salt, auth_data.iterations)
+        client_first=client, salt=auth_data.salt,
+        iterations=auth_data.iterations)
     client_final = truenas_pyscram.ClientFinalMessage(
-        client, server_first, auth_data.client_key, auth_data.stored_key)
+        client_first=client, server_first=server_first,
+        client_key=auth_data.client_key, stored_key=auth_data.stored_key)
     msg = truenas_pyscram.ServerFinalMessage(
-        client, server_first, client_final,
-        auth_data.stored_key, auth_data.server_key)
+        client_first=client, server_first=server_first,
+        client_final=client_final, stored_key=auth_data.stored_key,
+        server_key=auth_data.server_key)
 
     # Should create valid message regardless of client configuration
     assert isinstance(msg.signature, truenas_pyscram.CryptoDatum)
