@@ -24,6 +24,13 @@ truenas_pyscram_ext = Extension(
 )
 
 setup(
-    ext_modules=[truenas_pyscram_ext]
+    ext_modules=[truenas_pyscram_ext],
+    packages=['truenas_pyscram'],
+    package_dir={
+        'truenas_pyscram': 'stubs',
+    },
+    package_data={
+        'truenas_pyscram': ['*.pyi', 'py.typed'],
+    }
 )
 
