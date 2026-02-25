@@ -22,5 +22,3 @@ classifiers = [
     "Topic :: System :: Systems Administration"
 ]
 
-[tool.setuptools]
-
