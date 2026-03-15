@@ -20,7 +20,7 @@ jobs:
         apt update
         apt install -y libssl-dev libbsd-dev python3-dev build-essential devscripts debhelper
         apt install -y debhelper dh-python pybuild-plugin-pyproject python3-pytest python3-all-dev
-        apt install -y python3-pip python3-setuptools python3-build libidn-dev
+        apt install -y python3-pip python3-setuptools python3-build libidn-dev python3-mypy
 
     - name: Test Debian package build
       run: |
@@ -33,3 +33,14 @@ jobs:
         dpkg -i ../python3-truenas-scram_*.deb
         python3 -m pytest tests/ -v
 
+    - name: Run stub checks
+      run: |
+        # Check stubs are internally self-consistent
+        python3 -m mypy stubs/
+
+        # Check stubs match the installed C extension runtime.
+        # --allowlist: suppresses tp_init *args introspection false-positives
+        #   (tp_init slots always appear as *args/**kwargs to stubtest even when
+        #   the C code enforces keyword-only arguments internally).
+        python3 -m mypy.stubtest truenas_pyscram \
+          --allowlist tests/.stubtest_allowlist.txt
