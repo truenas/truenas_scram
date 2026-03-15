@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-or-later
-from typing import Union, overload
+from typing import Union, final, overload
 
 # Error codes
 SCRAM_E_SUCCESS: int
@@ -23,6 +23,7 @@ errorcode: dict[int, str]
 class ScramError(RuntimeError):
     code: int
 
+@final
 class CryptoDatum:
     def __init__(self, data: bytes, /) -> None: ...
     def clear(self) -> None: ...
@@ -36,7 +37,9 @@ class CryptoDatum:
     def __hash__(self) -> int: ...
     def __buffer__(self, flags: int, /) -> memoryview: ...
 
+@final
 class ScramAuthData:
+    """Returned by generate_scram_auth_data(); cannot be instantiated directly."""
     @property
     def salt(self) -> CryptoDatum: ...
     @property
@@ -50,6 +53,7 @@ class ScramAuthData:
     @property
     def server_key(self) -> CryptoDatum: ...
 
+@final
 class ClientFirstMessage:
     def __init__(
         self,
@@ -69,6 +73,7 @@ class ClientFirstMessage:
     def gs2_header(self) -> str | None: ...
     def __str__(self) -> str: ...
 
+@final
 class ServerFirstMessage:
     def __init__(
         self,
@@ -86,6 +91,7 @@ class ServerFirstMessage:
     def nonce(self) -> CryptoDatum: ...
     def __str__(self) -> str: ...
 
+@final
 class ClientFinalMessage:
     def __init__(
         self,
@@ -107,6 +113,7 @@ class ClientFinalMessage:
     def channel_binding(self) -> CryptoDatum | None: ...
     def __str__(self) -> str: ...
 
+@final
 class ServerFinalMessage:
     def __init__(
         self,

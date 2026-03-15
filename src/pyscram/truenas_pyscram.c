@@ -172,8 +172,8 @@ py_generate_scram_auth_data(PyObject *self, PyObject *args, PyObject *kwds)
 		return NULL;
 	}
 
-	/* Create ScramAuthData object */
-	result = (py_scram_auth_data_t *)PyObject_CallObject((PyObject *)&PyScramAuthData_Type, NULL);
+	/* Create ScramAuthData object (bypass tp_new via tp_alloc) */
+	result = (py_scram_auth_data_t *)PyScramAuthData_Type.tp_alloc(&PyScramAuthData_Type, 0);
 	if (!result) {
 		clear_scram_auth_data(&auth_data);
 		return NULL;
@@ -294,6 +294,12 @@ PyInit_truenas_pyscram(void)
 
 	/* Add CryptoDatum type */
 	if (PyModule_AddObjectRef(m, "CryptoDatum", (PyObject *)&PyCryptoDatum_Type) < 0) {
+		Py_DECREF(m);
+		return NULL;
+	}
+
+	/* Add ScramAuthData type (exported for reference; not directly instantiable) */
+	if (PyModule_AddObjectRef(m, "ScramAuthData", (PyObject *)&PyScramAuthData_Type) < 0) {
 		Py_DECREF(m);
 		return NULL;
 	}

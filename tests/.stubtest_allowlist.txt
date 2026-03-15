@@ -1,0 +1,8 @@
+# CPython's tp_init slot always introspects as (self, /, *args, **kwargs) even
+# when the C implementation enforces keyword-only arguments via PyArg_ParseTupleAndKeywords
+# with the '$' format flag.  The stubs accurately document the real keyword-only
+# signatures; suppress the false-positive *args mismatch for each message class.
+truenas_pyscram\.ClientFirstMessage\.__init__
+truenas_pyscram\.ClientFinalMessage\.__init__
+truenas_pyscram\.ServerFirstMessage\.__init__
+truenas_pyscram\.ServerFinalMessage\.__init__
