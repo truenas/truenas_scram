@@ -3,6 +3,15 @@
 #include <Python.h>
 #include "truenas_pyscram.h"
 
+static PyObject *
+py_scram_auth_data_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
+{
+	PyErr_Format(PyExc_TypeError,
+	    "%.100s cannot be instantiated directly",
+	    type->tp_name);
+	return NULL;
+}
+
 static void
 py_scram_auth_data_dealloc(py_scram_auth_data_t *self)
 {
@@ -145,7 +154,7 @@ PyTypeObject PyScramAuthData_Type = {
 	.tp_basicsize = sizeof(py_scram_auth_data_t),
 	.tp_itemsize = 0,
 	.tp_flags = Py_TPFLAGS_DEFAULT,
-	.tp_new = PyType_GenericNew,
+	.tp_new = py_scram_auth_data_new,
 	.tp_dealloc = (destructor)py_scram_auth_data_dealloc,
 	.tp_repr = (reprfunc)py_scram_auth_data_repr,
 	.tp_getset = py_scram_auth_data_getsetters,
