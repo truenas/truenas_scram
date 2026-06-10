@@ -18,6 +18,9 @@
 #define SCRAM_NONCE_SIZE 32  /* raw bytes */
 #define SCRAM_MAX_USERNAME_LEN 256
 
+/* RFC 5929 channel-binding type names (the "cb-name" in a "p=" gs2 flag) */
+#define SCRAM_CB_TLS_SERVER_END_POINT "tls-server-end-point"
+
 /* Error codes enum */
 typedef enum {
 	SCRAM_E_SUCCESS = 0,
@@ -261,6 +264,33 @@ scram_resp_t dup_crypto_datum(const crypto_datum_t *in, crypto_datum_t *out, scr
 /* SCRAM client functions */
 
 /**
+ * @brief Build a GS2 header string for a client message.
+ *
+ * Assembles the GS2 header (RFC 5801 / RFC 5802 Section 7) WITHOUT the trailing
+ * ",," separator -- matching the convention stored in
+ * scram_client_first_t.gs2_header and consumed by the serializers, which append
+ * the separator themselves. The result is suitable to pass as the @p gs2_header
+ * argument of scram_create_client_first_message().
+ *
+ * @param[in]	flag - the gs2-cbind-flag: 'n' (no channel binding), 'y'
+ *		(channel binding supported but not used), or 'p' (channel binding
+ *		used). Use the first character of GS2_FLAG_* if desired.
+ * @param[in]	cb_name - the channel-binding type name (e.g.
+ *		SCRAM_CB_TLS_SERVER_END_POINT). REQUIRED and non-empty when @p flag
+ *		is 'p'; MUST be NULL for 'n' and 'y'.
+ * @param[in]	authzid - reserved for a future authorization identity; MUST be
+ *		NULL today.
+ * @param[out]	out - newly allocated NUL-terminated header string; the caller
+ *		frees it with free().
+ * @param[in,out]	error - error buffer for detailed error information.
+ * @return	SCRAM_E_SUCCESS on success, error code on failure.
+ */
+scram_resp_t scram_build_gs2_header(char flag, const char *cb_name,
+				    const char *authzid, char **out,
+				    scram_error_t *error);
+
+
+/**
  * @brief create SCRAM client first message structure
  *
  * This function creates and initializes a new scram_client_first_message
@@ -334,6 +364,55 @@ scram_resp_t scram_verify_client_final_message(const scram_client_first_t *cfirs
 					      const scram_client_final_t *cfinal,
 					      const crypto_datum_t *stored_key,
 					      scram_error_t *error);
+
+/**
+ * @brief Verify a SCRAM client-final-message with channel binding (SCRAM-PLUS).
+ *
+ * Like scram_verify_client_final_message(), but additionally enforces channel
+ * binding per RFC 5802 6 / RFC 5801. When @p expected_channel_binding is non-NULL
+ * the server is treated as channel-binding-capable: a "p" gs2 flag's cbind-data
+ * must equal @p expected_channel_binding (constant-time), a "y" flag is rejected
+ * as a downgrade, and a "n" flag is rejected only when @p require_channel_binding
+ * is true. With a NULL expected binding and require=false this behaves exactly
+ * like the plain verification.
+ *
+ * @param[in] expected_channel_binding - this server's channel binding value
+ *            (e.g. the RFC 5929 tls-server-end-point hash), or NULL.
+ * @param[in] require_channel_binding - reject clients that do not use binding.
+ */
+scram_resp_t scram_verify_client_final_message_cb(const scram_client_first_t *cfirst,
+					      const scram_server_first_t *sfirst,
+					      const scram_client_final_t *cfinal,
+					      const crypto_datum_t *stored_key,
+					      const crypto_datum_t *expected_channel_binding,
+					      bool require_channel_binding,
+					      scram_error_t *error);
+
+/**
+ * @brief Compute the RFC 5929 'tls-server-end-point' channel binding value.
+ *
+ * Parses the leaf certificate DER (the first cert in the TLS Certificate message)
+ * only to select the hash algorithm per RFC 5929 4.1 (the cert's signatureAlgorithm
+ * hash; MD5/SHA-1 -> SHA-256; no/multiple-hash sig algorithms are undefined and
+ * rejected), then returns Hash(cert_der). Note this is independent of SCRAM's
+ * SHA-512. @p binding_out must be released with crypto_datum_clear().
+ */
+scram_resp_t scram_compute_tls_server_end_point(const unsigned char *cert_der,
+						size_t cert_der_len,
+						crypto_datum_t *binding_out,
+						scram_error_t *error);
+
+/**
+ * @brief Compute the RFC 5929 'tls-server-end-point' binding from a PEM buffer.
+ *
+ * Reads the FIRST PEM CERTIFICATE block (the leaf, even when the buffer holds a
+ * leaf+chain concatenation) and computes scram_compute_tls_server_end_point()
+ * over its exact DER. @p binding_out must be released with crypto_datum_clear().
+ */
+scram_resp_t scram_compute_tls_server_end_point_from_pem(const char *pem,
+						size_t pem_len,
+						crypto_datum_t *binding_out,
+						scram_error_t *error);
 
 /**
  * @brief Verify SCRAM server signature as specified in RFC 5802

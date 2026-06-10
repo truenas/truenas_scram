@@ -17,6 +17,9 @@ SCRAM_MIN_ITERS: int
 SCRAM_MAX_ITERS: int
 SCRAM_MAX_USERNAME_LEN: int
 
+# Channel-binding type names (RFC 5929)
+CB_TLS_SERVER_END_POINT: str
+
 # Error code to name mapping
 errorcode: dict[int, str]
 
@@ -62,6 +65,7 @@ class ClientFirstMessage:
         api_key_id: int = ...,
         gs2_header: str | None = ...,
         rfc_string: str | None = ...,
+        channel_binding_type: str | None = ...,
     ) -> None: ...
     @property
     def username(self) -> str: ...
@@ -141,6 +145,8 @@ def verify_client_final_message(
     server_first: ServerFirstMessage,
     client_final: ClientFinalMessage,
     stored_key: CryptoDatum,
+    channel_binding: CryptoDatum | None = ...,
+    require_channel_binding: bool = ...,
 ) -> None: ...
 def verify_server_signature(
     client_first: ClientFirstMessage,
@@ -149,3 +155,4 @@ def verify_server_signature(
     server_final: ServerFinalMessage,
     server_key: CryptoDatum,
 ) -> None: ...
+def compute_tls_server_end_point(cert_der: bytes) -> CryptoDatum: ...

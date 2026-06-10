@@ -8,6 +8,8 @@ typedef struct {
 	py_server_first_t *server_first;
 	py_client_final_t *client_final;
 	py_crypto_datum_t *stored_key;
+	py_crypto_datum_t *channel_binding;  /* optional (NULL if not provided) */
+	int require_channel_binding;
 } client_final_verify_params_t;
 
 typedef struct {
@@ -26,12 +28,16 @@ parse_client_final_verify_params(PyObject *args, PyObject *kwds,
 	PyObject *server_first_obj = NULL;
 	PyObject *client_final_obj = NULL;
 	PyObject *stored_key_obj = NULL;
+	PyObject *channel_binding_obj = NULL;
+	int require_channel_binding = 0;
 	static char *kwlist[] = {"client_first", "server_first", "client_final",
-				 "stored_key", NULL};
+				 "stored_key", "channel_binding",
+				 "require_channel_binding", NULL};
 
-	if (!PyArg_ParseTupleAndKeywords(args, kwds, "OOOO", kwlist,
+	if (!PyArg_ParseTupleAndKeywords(args, kwds, "OOOO|Op", kwlist,
 					 &client_first_obj, &server_first_obj,
-					 &client_final_obj, &stored_key_obj)) {
+					 &client_final_obj, &stored_key_obj,
+					 &channel_binding_obj, &require_channel_binding)) {
 		return -1;
 	}
 
@@ -95,6 +101,19 @@ parse_client_final_verify_params(PyObject *args, PyObject *kwds,
 				"stored_key CryptoDatum not initialized");
 		return -1;
 	}
+
+	/* Optional channel binding: a CryptoDatum (SCRAM-PLUS) or None */
+	params->channel_binding = NULL;
+	if (channel_binding_obj && channel_binding_obj != Py_None) {
+		if (!PyObject_IsInstance(channel_binding_obj,
+					 (PyObject *)&PyCryptoDatum_Type)) {
+			PyErr_SetString(PyExc_TypeError,
+					"channel_binding must be a CryptoDatum or None");
+			return -1;
+		}
+		params->channel_binding = (py_crypto_datum_t *)channel_binding_obj;
+	}
+	params->require_channel_binding = require_channel_binding;
 
 	return 0;
 }
@@ -211,11 +230,13 @@ py_verify_client_final_message(PyObject *self, PyObject *args, PyObject *kwds)
 
 	/* Perform verification under GIL drop */
 	Py_BEGIN_ALLOW_THREADS
-	ret = scram_verify_client_final_message(
+	ret = scram_verify_client_final_message_cb(
 		params.client_first->msg,
 		params.server_first->msg,
 		params.client_final->msg,
 		&params.stored_key->datum,
+		params.channel_binding ? &params.channel_binding->datum : NULL,
+		params.require_channel_binding ? true : false,
 		&error);
 	Py_END_ALLOW_THREADS
 
@@ -226,6 +247,38 @@ py_verify_client_final_message(PyObject *self, PyObject *args, PyObject *kwds)
 	}
 
 	Py_RETURN_NONE;
+}
+
+
+PyObject *
+py_compute_tls_server_end_point(PyObject *self, PyObject *args, PyObject *kwds)
+{
+	const char *cert_der = NULL;
+	Py_ssize_t cert_der_len = 0;
+	crypto_datum_t binding = {0};
+	scram_error_t error = {0};
+	scram_resp_t ret;
+	PyObject *result = NULL;
+	static char *kwlist[] = {"cert_der", NULL};
+
+	/* read-only view into a bytes-like object (matches CryptoDatum's "y#") */
+	if (!PyArg_ParseTupleAndKeywords(args, kwds, "y#", kwlist,
+					 &cert_der, &cert_der_len)) {
+		return NULL;
+	}
+
+	ret = scram_compute_tls_server_end_point(
+		(const unsigned char *)cert_der, (size_t)cert_der_len, &binding, &error);
+
+	if (ret != SCRAM_E_SUCCESS) {
+		set_exc_from_scram(ret, &error,
+				   "tls-server-end-point computation failed");
+		return NULL;
+	}
+
+	result = crypto_datum_to_pycrypto_datum(&binding);
+	crypto_datum_clear(&binding, false);
+	return result;
 }
 
 

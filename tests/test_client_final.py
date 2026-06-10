@@ -390,3 +390,44 @@ def test_client_final_message_none_channel_binding(client_first, server_first,
     assert isinstance(msg.nonce, truenas_pyscram.CryptoDatum)
     assert isinstance(msg.client_proof, truenas_pyscram.CryptoDatum)
     assert msg.channel_binding is None
+
+
+def test_client_final_message_cbind_input_has_gs2_separator(client_first_with_gs2,
+                                                            server_first_with_gs2,
+                                                            auth_data):
+    """The c= cbind-input must be gs2-header + ',,' + cbind-data (RFC 5802 7)."""
+    binding = truenas_pyscram.CryptoDatum(b"ABC")
+    msg = truenas_pyscram.ClientFinalMessage(
+        client_first=client_first_with_gs2,
+        server_first=server_first_with_gs2,
+        client_key=auth_data.client_key,
+        stored_key=auth_data.stored_key,
+        channel_binding=binding)
+
+    # str() is "c=<base64>,r=...,p=..."; the base64 alphabet has no ',',
+    # so splitting on ',' safely isolates the c= attribute.
+    c_b64 = str(msg).split(',')[0][len("c="):]
+    assert base64.b64decode(c_b64) == b"p=tls-unique,,ABC"
+
+
+def test_client_final_p_flag_requires_binding(client_first_with_gs2,
+                                              server_first_with_gs2, auth_data):
+    """A 'p' gs2 flag without channel binding data must be rejected."""
+    with pytest.raises(truenas_pyscram.ScramError,
+                       match="requires channel binding data"):
+        truenas_pyscram.ClientFinalMessage(
+            client_first=client_first_with_gs2,
+            server_first=server_first_with_gs2,
+            client_key=auth_data.client_key,
+            stored_key=auth_data.stored_key)
+
+
+def test_client_final_n_flag_rejects_binding(client_first, server_first, auth_data):
+    """A non-'p' gs2 flag with channel binding data must be rejected."""
+    with pytest.raises(truenas_pyscram.ScramError, match="gs2 flag is not 'p'"):
+        truenas_pyscram.ClientFinalMessage(
+            client_first=client_first,
+            server_first=server_first,
+            client_key=auth_data.client_key,
+            stored_key=auth_data.stored_key,
+            channel_binding=truenas_pyscram.CryptoDatum(b"x" * 32))

@@ -209,6 +209,59 @@ cleanup:
 	return ret;
 }
 
+scram_resp_t scram_build_gs2_header(char flag, const char *cb_name,
+				    const char *authzid, char **out,
+				    scram_error_t *error)
+{
+	char flag_str[2] = { flag, '\0' };
+
+	if (!out) {
+		scram_set_error(error, "invalid input parameters");
+		return SCRAM_E_INVALID_REQUEST;
+	}
+	*out = NULL;
+
+	/* authzid is reserved for a future authorization-identity feature */
+	if (authzid) {
+		scram_set_error(error, "authzid is not yet supported");
+		return SCRAM_E_INVALID_REQUEST;
+	}
+
+	if (flag == GS2_FLAG_CB_USED[0]) {
+		/* "p=<cb-name>": a channel-binding name is required */
+		if (!cb_name || cb_name[0] == '\0') {
+			scram_set_error(error, "channel-binding flag 'p' requires a "
+					"channel-binding name");
+			return SCRAM_E_INVALID_REQUEST;
+		}
+		if (asprintf(out, GS2_FLAG_CB_USED "=%s", cb_name) < 0) {
+			*out = NULL;
+			scram_set_error(error, "asprintf() failed for GS2 header");
+			return SCRAM_E_MEMORY_ERROR;
+		}
+		return SCRAM_E_SUCCESS;
+	}
+
+	if (flag == GS2_FLAG_NO_CB_SUPPORT[0] ||
+	    flag == GS2_FLAG_CB_SUPPORT_NOT_USED[0]) {
+		/* "n" / "y": a channel-binding name is not permitted */
+		if (cb_name) {
+			scram_set_error(error, "channel-binding name is only valid "
+					"with the 'p' flag");
+			return SCRAM_E_INVALID_REQUEST;
+		}
+		*out = strdup(flag_str);
+		if (!*out) {
+			scram_set_error(error, "strdup() failed for GS2 header");
+			return SCRAM_E_MEMORY_ERROR;
+		}
+		return SCRAM_E_SUCCESS;
+	}
+
+	scram_set_error(error, "invalid gs2 channel-binding flag");
+	return SCRAM_E_INVALID_REQUEST;
+}
+
 scram_resp_t scram_create_client_first_message(const char *username,
 					       uint32_t api_key_id,
 					       const char *gs2_header,

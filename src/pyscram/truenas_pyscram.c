@@ -64,7 +64,7 @@ PyDoc_STRVAR(generate_scram_auth_data__doc__,
 );
 
 PyDoc_STRVAR(py_verify_client_final_message__doc__,
-"verify_client_final_message(client_first, server_first, client_final, stored_key) -> None\n"
+"verify_client_final_message(client_first, server_first, client_final, stored_key, channel_binding=None, require_channel_binding=False) -> None\n"
 "----------------------------------------------------------------------------------------\n\n"
 "Server-side verification of SCRAM client final message as specified in RFC 5802.\n\n"
 "This function is used by the server to verify the client-final-message proof\n"
@@ -80,7 +80,13 @@ PyDoc_STRVAR(py_verify_client_final_message__doc__,
 "client_final : ClientFinalMessage\n"
 "    The client final message to verify\n"
 "stored_key : CryptoDatum\n"
-"    The stored key derived from the user's credentials\n\n"
+"    The stored key derived from the user's credentials\n"
+"channel_binding : CryptoDatum, optional\n"
+"    The server's expected channel binding value (e.g. the RFC 5929\n"
+"    tls-server-end-point hash). When given, a client that used channel\n"
+"    binding (gs2 'p') must match it, and a 'y' downgrade is rejected.\n"
+"require_channel_binding : bool, optional\n"
+"    Reject clients that do not use channel binding (default False).\n\n"
 "Raises\n"
 "------\n"
 "RuntimeError\n"
@@ -185,6 +191,23 @@ py_generate_scram_auth_data(PyObject *self, PyObject *args, PyObject *kwds)
 	return (PyObject *)result;
 }
 
+PyDoc_STRVAR(py_compute_tls_server_end_point__doc__,
+"compute_tls_server_end_point(cert_der) -> CryptoDatum\n"
+"----------------------------------------------------\n\n"
+"Compute the RFC 5929 'tls-server-end-point' channel binding for a server\n"
+"(leaf) certificate: the hash of the DER certificate using the hash from its\n"
+"signatureAlgorithm (MD5/SHA-1 -> SHA-256). Independent of SCRAM's SHA-512.\n\n"
+"Parameters\n"
+"----------\n"
+"cert_der : bytes\n"
+"    The DER-encoded leaf certificate (e.g. ssl.getpeercert(binary_form=True)).\n\n"
+"Returns\n"
+"-------\n"
+"CryptoDatum\n"
+"    The channel binding value, usable as ClientFinalMessage(channel_binding=)\n"
+"    or verify_client_final_message(channel_binding=).\n"
+);
+
 static PyMethodDef truenas_pyscram_methods[] = {
 	{
 		.ml_name = "generate_nonce",
@@ -209,6 +232,12 @@ static PyMethodDef truenas_pyscram_methods[] = {
 		.ml_meth = (PyCFunction)py_verify_server_signature,
 		.ml_flags = METH_VARARGS | METH_KEYWORDS,
 		.ml_doc = py_verify_server_signature__doc__
+	},
+	{
+		.ml_name = "compute_tls_server_end_point",
+		.ml_meth = (PyCFunction)py_compute_tls_server_end_point,
+		.ml_flags = METH_VARARGS | METH_KEYWORDS,
+		.ml_doc = py_compute_tls_server_end_point__doc__
 	},
 	{NULL, NULL, 0, NULL}
 };
@@ -346,6 +375,13 @@ PyInit_truenas_pyscram(void)
 	    PyModule_AddIntConstant(m, "SCRAM_MIN_ITERS", SCRAM_MIN_ITERS) < 0 ||
 	    PyModule_AddIntConstant(m, "SCRAM_MAX_ITERS", SCRAM_MAX_ITERS) < 0 ||
 	    PyModule_AddIntConstant(m, "SCRAM_MAX_USERNAME_LEN", SCRAM_MAX_USERNAME_LEN) < 0) {
+		Py_DECREF(m);
+		return NULL;
+	}
+
+	/* Add channel-binding type names (RFC 5929) */
+	if (PyModule_AddStringConstant(m, "CB_TLS_SERVER_END_POINT",
+				       SCRAM_CB_TLS_SERVER_END_POINT) < 0) {
 		Py_DECREF(m);
 		return NULL;
 	}

@@ -11,6 +11,9 @@
 #include <openssl/rand.h>
 #include <openssl/sha.h>
 #include <openssl/err.h>
+#include <openssl/x509.h>
+#include <openssl/obj_mac.h>
+#include <openssl/pem.h>
 
 void crypto_datum_clear(crypto_datum_t *datum, bool zero_data)
 {
@@ -307,6 +310,141 @@ scram_resp_t scram_constant_time_compare(const crypto_datum_t *a, const crypto_d
 	*match = !size_mismatch && (result == 0);
 
 	return SCRAM_E_SUCCESS;
+}
+
+scram_resp_t scram_compute_tls_server_end_point(const unsigned char *cert_der,
+						size_t cert_der_len,
+						crypto_datum_t *binding_out,
+						scram_error_t *error)
+{
+	X509 *cert = NULL;
+	const unsigned char *p = cert_der;
+	int mdnid = 0, pknid = 0, secbits = 0;
+	uint32_t flags = 0;
+	const EVP_MD *md = NULL;
+	unsigned char digest[EVP_MAX_MD_SIZE];
+	unsigned int digest_len = 0;
+	scram_resp_t ret = SCRAM_E_FAULT;
+
+	if (!cert_der || cert_der_len == 0 || !binding_out) {
+		scram_set_error(error, "invalid input parameters");
+		return SCRAM_E_INVALID_REQUEST;
+	}
+
+	if (cert_der_len > SCRAM_MAX_DATA_SIZE) {
+		scram_set_error(error, "certificate too large (max %d bytes)", SCRAM_MAX_DATA_SIZE);
+		return SCRAM_E_INVALID_REQUEST;
+	}
+
+	/*
+	 * RFC 5929 4: tls-server-end-point is the hash of the server's (leaf)
+	 * certificate as it appears, octet for octet, in the Certificate message.
+	 * The caller passes that DER; we parse it only to select the hash algorithm.
+	 */
+	cert = d2i_X509(NULL, &p, (long)cert_der_len);
+	if (!cert) {
+		scram_set_ssl_error(error, "d2i_X509() failed to parse certificate");
+		return SCRAM_E_INVALID_REQUEST;
+	}
+
+	/*
+	 * RFC 5929 4.1 hash selection:
+	 *  - signatureAlgorithm hash is MD5 or SHA-1   -> SHA-256
+	 *  - a single hash that is neither MD5 nor SHA-1 -> that hash
+	 *  - no hash / multiple hashes (e.g. EdDSA)    -> undefined (reject)
+	 */
+	if (X509_get_signature_info(cert, &mdnid, &pknid, &secbits, &flags) != 1) {
+		scram_set_ssl_error(error, "X509_get_signature_info() failed");
+		ret = SCRAM_E_CRYPTO_ERROR;
+		goto cleanup;
+	}
+
+	if (mdnid == NID_undef) {
+		scram_set_error(error, "tls-server-end-point is undefined for this "
+				"certificate's signature algorithm");
+		ret = SCRAM_E_INVALID_REQUEST;
+		goto cleanup;
+	} else if (mdnid == NID_md5 || mdnid == NID_sha1) {
+		md = EVP_sha256();
+	} else {
+		md = EVP_get_digestbynid(mdnid);
+		if (!md) {
+			scram_set_error(error, "unsupported certificate signature hash");
+			ret = SCRAM_E_CRYPTO_ERROR;
+			goto cleanup;
+		}
+	}
+
+	if (EVP_Digest(cert_der, cert_der_len, digest, &digest_len, md, NULL) != 1) {
+		scram_set_ssl_error(error, "EVP_Digest() failed");
+		ret = SCRAM_E_CRYPTO_ERROR;
+		goto cleanup;
+	}
+
+	binding_out->data = malloc(digest_len);
+	if (!binding_out->data) {
+		scram_set_error(error, "malloc() failed for channel binding");
+		ret = SCRAM_E_MEMORY_ERROR;
+		goto cleanup;
+	}
+	memcpy(binding_out->data, digest, digest_len);
+	binding_out->size = digest_len;
+	ret = SCRAM_E_SUCCESS;
+
+cleanup:
+	X509_free(cert);
+	return ret;
+}
+
+scram_resp_t scram_compute_tls_server_end_point_from_pem(const char *pem,
+							size_t pem_len,
+							crypto_datum_t *binding_out,
+							scram_error_t *error)
+{
+	BIO *bio = NULL;
+	char *name = NULL;
+	char *header = NULL;
+	unsigned char *der = NULL;
+	long der_len = 0;
+	bool is_cert = false;
+	scram_resp_t ret = SCRAM_E_FAULT;
+
+	if (!pem || pem_len == 0 || !binding_out) {
+		scram_set_error(error, "invalid input parameters");
+		return SCRAM_E_INVALID_REQUEST;
+	}
+
+	bio = BIO_new_mem_buf(pem, (int)pem_len);
+	if (!bio) {
+		scram_set_ssl_error(error, "BIO_new_mem_buf() failed");
+		return SCRAM_E_MEMORY_ERROR;
+	}
+
+	/*
+	 * Read the FIRST PEM object and require it to be a CERTIFICATE. RFC 5929
+	 * hashes the leaf only, even when the file holds leaf+chain, so we take the
+	 * first block. PEM_read_bio() returns the exact base64-decoded DER, so the
+	 * hash is over the octets as served in the TLS Certificate message.
+	 */
+	if (PEM_read_bio(bio, &name, &header, &der, &der_len) != 1) {
+		BIO_free(bio);
+		scram_set_ssl_error(error, "no PEM certificate found");
+		return SCRAM_E_PARSE_ERROR;
+	}
+	BIO_free(bio);
+
+	is_cert = (name != NULL && strcmp(name, "CERTIFICATE") == 0);
+	OPENSSL_free(name);
+	OPENSSL_free(header);
+	if (!is_cert) {
+		OPENSSL_free(der);
+		scram_set_error(error, "first PEM object is not a CERTIFICATE");
+		return SCRAM_E_PARSE_ERROR;
+	}
+
+	ret = scram_compute_tls_server_end_point(der, (size_t)der_len, binding_out, error);
+	OPENSSL_free(der);
+	return ret;
 }
 
 int raw_api_key_to_scram_data(const char *api_key, const crypto_datum_t *salt,

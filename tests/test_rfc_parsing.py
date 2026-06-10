@@ -152,7 +152,15 @@ def test_client_final_parse_basic(client_server_first_messages):
 
 def test_client_final_parse_with_channel_binding(client_server_first_messages):
     """Test parsing client-final-message with channel binding."""
-    client_first, server_first, auth_data = client_server_first_messages
+    _, _, auth_data = client_server_first_messages
+
+    # A channel-bound client must advertise a "p=" gs2 header (RFC 5802 6).
+    client_first = scram.ClientFirstMessage(
+        username="testuser",
+        channel_binding_type=scram.CB_TLS_SERVER_END_POINT)
+    server_first = scram.ServerFirstMessage(
+        client_first=client_first, salt=auth_data.salt,
+        iterations=auth_data.iterations)
 
     channel_binding = scram.CryptoDatum(b"test-channel-binding-data")
 
