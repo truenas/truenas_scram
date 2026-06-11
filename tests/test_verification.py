@@ -272,7 +272,7 @@ def test_verification_functions_with_channel_binding(auth_data):
     """Test verification functions with channel binding."""
     # Create client with channel binding
     client_first = truenas_pyscram.ClientFirstMessage(
-        username="testuser", gs2_header="p=tls-unique")
+        username="testuser", gs2_header="p=x-test-binding")
     server_first = truenas_pyscram.ServerFirstMessage(
         client_first=client_first, salt=auth_data.salt,
         iterations=auth_data.iterations)
@@ -410,3 +410,107 @@ def test_scram_error_properties():
     assert exc.code == truenas_pyscram.SCRAM_E_AUTH_FAILED
     assert "SCRAM_E_AUTH_FAILED" in str(exc)
     assert "client proof verification failed" in str(exc).lower()
+
+
+def _self_signed_cert_der():
+    """A minimal self-signed leaf certificate (DER) for tls-server-end-point."""
+    pytest.importorskip("cryptography")
+    import datetime
+
+    from cryptography import x509
+    from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.primitives.asymmetric import ec
+    from cryptography.hazmat.primitives.serialization import Encoding
+    from cryptography.x509.oid import NameOID
+
+    key = ec.generate_private_key(ec.SECP256R1())
+    name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "scram-test")])
+    cert = (
+        x509.CertificateBuilder()
+        .subject_name(name)
+        .issuer_name(name)
+        .public_key(key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(datetime.datetime(2020, 1, 1))
+        .not_valid_after(datetime.datetime(2035, 1, 1))
+        .sign(key, hashes.SHA256())
+    )
+    return cert.public_bytes(Encoding.DER)
+
+
+def _channel_bound_client(auth_data, binding):
+    """Build a (client_first, server_first, client_final) bound to `binding`."""
+    client_first = truenas_pyscram.ClientFirstMessage(
+        username="testuser",
+        channel_binding_type=truenas_pyscram.CB_TLS_SERVER_END_POINT)
+    server_first = truenas_pyscram.ServerFirstMessage(
+        client_first=client_first, salt=auth_data.salt,
+        iterations=auth_data.iterations)
+    client_final = truenas_pyscram.ClientFinalMessage(
+        client_first=client_first, server_first=server_first,
+        client_key=auth_data.client_key, stored_key=auth_data.stored_key,
+        channel_binding=binding)
+    return client_first, server_first, client_final
+
+
+def test_verify_client_final_channel_binding_real_cert(auth_data):
+    """End-to-end: a real tls-server-end-point binding verifies successfully."""
+    binding = truenas_pyscram.compute_tls_server_end_point(_self_signed_cert_der())
+    client_first, server_first, client_final = _channel_bound_client(
+        auth_data, binding)
+
+    # Matching binding + require_channel_binding -> no exception raised
+    truenas_pyscram.verify_client_final_message(
+        client_first=client_first, server_first=server_first,
+        client_final=client_final, stored_key=auth_data.stored_key,
+        channel_binding=binding, require_channel_binding=True)
+
+
+def test_verify_client_final_channel_binding_mismatch(auth_data):
+    """A different server channel binding must fail verification."""
+    binding = truenas_pyscram.CryptoDatum(b"A" * 32)
+    wrong = truenas_pyscram.CryptoDatum(b"B" * 32)
+    client_first, server_first, client_final = _channel_bound_client(
+        auth_data, binding)
+
+    with pytest.raises(truenas_pyscram.ScramError, match="channel binding mismatch"):
+        truenas_pyscram.verify_client_final_message(
+            client_first=client_first, server_first=server_first,
+            client_final=client_final, stored_key=auth_data.stored_key,
+            channel_binding=wrong, require_channel_binding=True)
+
+
+def test_verify_client_final_require_rejects_plain_client(auth_data):
+    """require_channel_binding rejects a client that did not use binding."""
+    client_first = truenas_pyscram.ClientFirstMessage(username="testuser")
+    server_first = truenas_pyscram.ServerFirstMessage(
+        client_first=client_first, salt=auth_data.salt,
+        iterations=auth_data.iterations)
+    client_final = truenas_pyscram.ClientFinalMessage(
+        client_first=client_first, server_first=server_first,
+        client_key=auth_data.client_key, stored_key=auth_data.stored_key)
+
+    with pytest.raises(truenas_pyscram.ScramError, match="channel binding required"):
+        truenas_pyscram.verify_client_final_message(
+            client_first=client_first, server_first=server_first,
+            client_final=client_final, stored_key=auth_data.stored_key,
+            channel_binding=truenas_pyscram.CryptoDatum(b"A" * 32),
+            require_channel_binding=True)
+
+
+def test_verify_client_final_y_flag_downgrade_rejected(auth_data):
+    """A 'y' gs2 flag against a CB-capable server is a downgrade and must fail."""
+    client_first = truenas_pyscram.ClientFirstMessage(
+        username="testuser", gs2_header="y")
+    server_first = truenas_pyscram.ServerFirstMessage(
+        client_first=client_first, salt=auth_data.salt,
+        iterations=auth_data.iterations)
+    client_final = truenas_pyscram.ClientFinalMessage(
+        client_first=client_first, server_first=server_first,
+        client_key=auth_data.client_key, stored_key=auth_data.stored_key)
+
+    with pytest.raises(truenas_pyscram.ScramError, match="downgrade"):
+        truenas_pyscram.verify_client_final_message(
+            client_first=client_first, server_first=server_first,
+            client_final=client_final, stored_key=auth_data.stored_key,
+            channel_binding=truenas_pyscram.CryptoDatum(b"A" * 32))

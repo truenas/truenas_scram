@@ -186,4 +186,16 @@ PyObject *py_verify_client_final_message(PyObject *self, PyObject *args, PyObjec
  */
 PyObject *py_verify_server_signature(PyObject *self, PyObject *args, PyObject *kwds);
 
+/**
+ * @brief Python wrapper for RFC 5929 tls-server-end-point computation.
+ *
+ * Computes the channel binding value (hash of a leaf certificate DER) used for
+ * SCRAM-PLUS with the tls-server-end-point binding type.
+ *
+ * @param[in] args - positional arguments tuple (cert_der bytes)
+ * @param[in] kwds - keyword arguments dictionary
+ * @return new CryptoDatum object, or NULL on error
+ */
+PyObject *py_compute_tls_server_end_point(PyObject *self, PyObject *args, PyObject *kwds);
+
 #endif

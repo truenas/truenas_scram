@@ -281,7 +281,7 @@ def test_server_final_message_with_channel_binding(auth_data):
     """Test ServerFinalMessage with channel binding."""
     # Create client with channel binding
     client_first = truenas_pyscram.ClientFirstMessage(
-        username="testuser", gs2_header="p=tls-unique")
+        username="testuser", gs2_header="p=x-test-binding")
     server_first = truenas_pyscram.ServerFirstMessage(
         client_first=client_first, salt=auth_data.salt,
         iterations=auth_data.iterations)
@@ -301,12 +301,18 @@ def test_server_final_message_with_channel_binding(auth_data):
     assert isinstance(server_final.signature, truenas_pyscram.CryptoDatum)
     assert len(bytes(server_final.signature)) == 64
 
-    # Should produce different signature than without channel binding
+    # Should produce a different signature than a client WITHOUT channel binding.
+    # The no-CB client uses a plain "n" gs2 header (no cbind-data), so it needs
+    # its own client-first/server-first pair.
+    client_first_no_cb = truenas_pyscram.ClientFirstMessage(username="testuser")
+    server_first_no_cb = truenas_pyscram.ServerFirstMessage(
+        client_first=client_first_no_cb, salt=auth_data.salt,
+        iterations=auth_data.iterations)
     client_final_no_cb = truenas_pyscram.ClientFinalMessage(
-        client_first=client_first, server_first=server_first,
+        client_first=client_first_no_cb, server_first=server_first_no_cb,
         client_key=auth_data.client_key, stored_key=auth_data.stored_key)
     server_final_no_cb = truenas_pyscram.ServerFinalMessage(
-        client_first=client_first, server_first=server_first,
+        client_first=client_first_no_cb, server_first=server_first_no_cb,
         client_final=client_final_no_cb, stored_key=auth_data.stored_key,
         server_key=auth_data.server_key)
 

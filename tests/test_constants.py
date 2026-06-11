@@ -80,3 +80,10 @@ def test_iteration_limits_make_sense():
     """Test that iteration limits are logically ordered."""
     assert truenas_pyscram.SCRAM_MIN_ITERS < truenas_pyscram.SCRAM_DEFAULT_ITERS
     assert truenas_pyscram.SCRAM_DEFAULT_ITERS < truenas_pyscram.SCRAM_MAX_ITERS
+
+
+def test_channel_binding_type_constant():
+    """Test that the RFC 5929 channel-binding type name is exposed."""
+    assert hasattr(truenas_pyscram, "CB_TLS_SERVER_END_POINT")
+    assert truenas_pyscram.CB_TLS_SERVER_END_POINT == "tls-server-end-point"
+    assert isinstance(truenas_pyscram.CB_TLS_SERVER_END_POINT, str)

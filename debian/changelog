@@ -1,3 +1,23 @@
+truenas-scram (0.2.0-1) bookworm; urgency=medium
+
+  * Add SCRAM-PLUS channel binding support (RFC 5802/5801/5929):
+    - Server-side verification of the gs2 channel-binding flag with the
+      tls-server-end-point binding, including binding-mismatch rejection and
+      gs2 "y" downgrade detection (scram_verify_client_final_message_cb()).
+    - Compute the RFC 5929 tls-server-end-point value from a DER or PEM leaf
+      certificate (scram_compute_tls_server_end_point[_from_pem]()).
+    - Client construction helpers: scram_build_gs2_header() and the
+      ClientFirstMessage(channel_binding_type=...) keyword build a
+      "p=<cb-name>" gs2 header; add the CB_TLS_SERVER_END_POINT /
+      SCRAM_CB_TLS_SERVER_END_POINT channel-binding-type constant.
+  * Emit the gs2 ",," separator in the client-final "c=" attribute when a
+    custom gs2 header is set, so channel-bound messages are RFC 5802 conformant.
+  * Reject inconsistent gs2-flag / channel-binding-data combinations when
+    building a client-final message.
+  * Add a Debian symbols file for libtruenas-scram1.
+
+ -- Andrew Walker <andrew.walker@truenas.com>  Wed, 10 Jun 2026 20:56:00 +0000
+
 truenas-scram (0.1.0-1) bookworm; urgency=medium
 
   * Initial release.
