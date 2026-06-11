@@ -598,8 +598,14 @@ static scram_resp_t enforce_channel_binding_policy(const scram_client_final_t *c
 			return SCRAM_E_AUTH_FAILED;
 		}
 	} else {
+		/*
+		 * Not n/y/p: the gs2-cbind-flag is outside the RFC 5802 grammar.
+		 * Unlike the branches above -- which reject *valid* flags on policy
+		 * grounds -- this is a malformed message, so report it as a parse
+		 * error rather than an auth failure.
+		 */
 		scram_set_error(error, "invalid gs2 channel-binding flag");
-		return SCRAM_E_AUTH_FAILED;
+		return SCRAM_E_PARSE_ERROR;
 	}
 
 	return SCRAM_E_SUCCESS;

@@ -266,8 +266,11 @@ py_compute_tls_server_end_point(PyObject *self, PyObject *args, PyObject *kwds)
 		return NULL;
 	}
 
+	/* Hash the certificate under GIL drop (touches no Python objects) */
+	Py_BEGIN_ALLOW_THREADS
 	ret = scram_compute_tls_server_end_point(
 		(const unsigned char *)cert_der, (size_t)cert_der_len, &binding, &error);
+	Py_END_ALLOW_THREADS
 
 	if (ret != SCRAM_E_SUCCESS) {
 		set_exc_from_scram(ret, &error,

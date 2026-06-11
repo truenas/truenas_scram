@@ -299,6 +299,7 @@ scram_resp_t scram_create_client_first_message(const char *username,
 			     sizeof(msg->principal.username),
 			     error);
 	if (ret != SCRAM_E_SUCCESS) {
+		free(msg);
 		return ret;
 	}
 

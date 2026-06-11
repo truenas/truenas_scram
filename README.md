@@ -154,7 +154,7 @@ truenas_pyscram.verify_client_final_message(
     channel_binding=binding, require_channel_binding=True)
 ```
 
-You may also pass a raw GS2 header (e.g. `gs2_header="p=tls-unique"`) together
+You may also pass a raw GS2 header (e.g. `gs2_header="p=tls-exporter"`) together
 with the matching `channel_binding` data for other binding types. The client
 enforces GS2 flag / binding-data consistency: a `p` flag requires binding data,
 and `n`/`y` must not carry any.

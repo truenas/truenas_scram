@@ -55,6 +55,12 @@ def test_client_first_conflicting_params_error():
         scram.ClientFirstMessage(username="test", rfc_string="n,,n=test,r=xxx")
 
 
+def test_client_first_rfc_string_gs2_header_exclusive():
+    """rfc_string and gs2_header are mutually exclusive (gs2_header would be ignored)."""
+    with pytest.raises(ValueError, match="Cannot specify both rfc_string and gs2_header"):
+        scram.ClientFirstMessage(rfc_string="n,,n=test,r=xxx", gs2_header="p=tls-exporter")
+
+
 def test_server_first_parse_basic():
     """Test parsing a basic server-first-message from RFC string."""
     client_first = scram.ClientFirstMessage(username="testuser")
