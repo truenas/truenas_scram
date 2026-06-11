@@ -2,6 +2,7 @@
 
 import base64
 
+import pytest
 import truenas_pyscram
 
 
@@ -257,3 +258,34 @@ def test_client_first_message_attributes_parsing():
     # Verify nonce matches the original
     original_nonce_bytes = bytes(msg.nonce)
     assert nonce_decoded == original_nonce_bytes
+
+
+def test_client_first_channel_binding_type():
+    """channel_binding_type builds a 'p=<name>' GS2 header."""
+    msg = truenas_pyscram.ClientFirstMessage(
+        username="testuser",
+        channel_binding_type=truenas_pyscram.CB_TLS_SERVER_END_POINT)
+    assert msg.gs2_header == "p=tls-server-end-point"
+    # The serialized client-first must carry the gs2 header + ',,' separator
+    assert str(msg).startswith("p=tls-server-end-point,,")
+
+
+def test_client_first_channel_binding_type_conflicts_gs2_header():
+    """channel_binding_type and gs2_header are mutually exclusive."""
+    with pytest.raises(
+            ValueError,
+            match="Cannot specify both gs2_header and channel_binding_type"):
+        truenas_pyscram.ClientFirstMessage(
+            username="testuser", gs2_header="n",
+            channel_binding_type=truenas_pyscram.CB_TLS_SERVER_END_POINT)
+
+
+def test_client_first_channel_binding_type_conflicts_rfc_string():
+    """channel_binding_type and rfc_string are mutually exclusive."""
+    rfc = str(truenas_pyscram.ClientFirstMessage(username="testuser"))
+    with pytest.raises(
+            ValueError,
+            match="Cannot specify both rfc_string and channel_binding_type"):
+        truenas_pyscram.ClientFirstMessage(
+            rfc_string=rfc,
+            channel_binding_type=truenas_pyscram.CB_TLS_SERVER_END_POINT)

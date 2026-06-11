@@ -6,7 +6,7 @@ A Python C extension implementing SCRAM (Salted Challenge Response Authenticatio
 
 - Complete RFC 5802 SCRAM-SHA-512 implementation
 - Python C extension for high performance
-- Support for channel binding (tls-unique, tls-exporter)
+- Support for channel binding (tls-server-end-point)
 - Comprehensive message validation and verification
 - Server-side and client-side authentication functions
 - Cryptographically secure nonce generation
@@ -126,27 +126,48 @@ print("Authentication successful!")
 
 ## Channel Binding
 
-For enhanced security over TLS connections, SCRAM supports channel binding:
+For enhanced security over TLS connections, SCRAM supports channel binding
+(SCRAM-PLUS, RFC 5802 / RFC 5929). The recommended binding over TLS is
+`tls-server-end-point`, which ties the authentication to the server's
+certificate and detects a TLS-terminating man-in-the-middle.
 
 ```python
-# Client with channel binding
-client_first = truenas_pyscram.ClientFirstMessage(
-    "alice", gs2_header="p=tls-unique")
+# Compute the RFC 5929 tls-server-end-point value from the server's leaf
+# certificate (e.g. ssl_sock.getpeercert(binary_form=True)).
+binding = truenas_pyscram.compute_tls_server_end_point(cert_der)
 
-# Channel binding data from TLS connection
-channel_binding = truenas_pyscram.CryptoDatum(tls_channel_binding_data)
+# Client: channel_binding_type builds the "p=tls-server-end-point" GS2 header
+# for you -- no need to hand-format the header string.
+client_first = truenas_pyscram.ClientFirstMessage(
+    username="alice",
+    channel_binding_type=truenas_pyscram.CB_TLS_SERVER_END_POINT)
 
 client_final = truenas_pyscram.ClientFinalMessage(
-    client_first, server_first, auth_data.client_key,
-    auth_data.stored_key, channel_binding)
+    client_first=client_first, server_first=server_first,
+    client_key=auth_data.client_key, stored_key=auth_data.stored_key,
+    channel_binding=binding)
+
+# Server: enforce the binding when verifying the client-final-message.
+truenas_pyscram.verify_client_final_message(
+    client_first=client_first, server_first=server_first,
+    client_final=client_final, stored_key=auth_data.stored_key,
+    channel_binding=binding, require_channel_binding=True)
 ```
+
+You may also pass a raw GS2 header (e.g. `gs2_header="p=tls-exporter"`) together
+with the matching `channel_binding` data for other binding types. The client
+enforces GS2 flag / binding-data consistency: a `p` flag requires binding data,
+and `n`/`y` must not carry any.
 
 ## API Reference
 
 ### Core Classes
 
-#### `ClientFirstMessage(username, api_key_id=0, gs2_header="")`
-Creates the initial client message with username and nonce.
+#### `ClientFirstMessage(username, api_key_id=0, gs2_header="", channel_binding_type=None)`
+Creates the initial client message with username and nonce. Pass
+`channel_binding_type` (e.g. `truenas_pyscram.CB_TLS_SERVER_END_POINT`) to build
+a `p=<name>` GS2 header automatically instead of supplying `gs2_header` directly
+(the two are mutually exclusive).
 
 **Properties:**
 - `nonce`: Client-generated random nonce (CryptoDatum)

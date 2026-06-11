@@ -33,14 +33,14 @@ def test_client_first_parse_with_api_key():
 
 def test_client_first_parse_with_gs2_header():
     """Test parsing client-first-message with GS2 header."""
-    msg1 = scram.ClientFirstMessage(username="testuser", gs2_header="p=tls-unique")
+    msg1 = scram.ClientFirstMessage(username="testuser", gs2_header="p=x-test-binding")
     rfc_str = str(msg1)
 
     msg2 = scram.ClientFirstMessage(rfc_string=rfc_str)
 
     assert str(msg1) == str(msg2)
     assert msg2.username == "testuser"
-    assert msg2.gs2_header == "p=tls-unique"
+    assert msg2.gs2_header == "p=x-test-binding"
 
 
 def test_client_first_no_params_error():
@@ -53,6 +53,12 @@ def test_client_first_conflicting_params_error():
     """Test that username and rfc_string are mutually exclusive."""
     with pytest.raises(ValueError, match="Cannot specify both rfc_string and username"):
         scram.ClientFirstMessage(username="test", rfc_string="n,,n=test,r=xxx")
+
+
+def test_client_first_rfc_string_gs2_header_exclusive():
+    """rfc_string and gs2_header are mutually exclusive (gs2_header would be ignored)."""
+    with pytest.raises(ValueError, match="Cannot specify both rfc_string and gs2_header"):
+        scram.ClientFirstMessage(rfc_string="n,,n=test,r=xxx", gs2_header="p=tls-exporter")
 
 
 def test_server_first_parse_basic():
@@ -152,7 +158,15 @@ def test_client_final_parse_basic(client_server_first_messages):
 
 def test_client_final_parse_with_channel_binding(client_server_first_messages):
     """Test parsing client-final-message with channel binding."""
-    client_first, server_first, auth_data = client_server_first_messages
+    _, _, auth_data = client_server_first_messages
+
+    # A channel-bound client must advertise a "p=" gs2 header (RFC 5802 6).
+    client_first = scram.ClientFirstMessage(
+        username="testuser",
+        channel_binding_type=scram.CB_TLS_SERVER_END_POINT)
+    server_first = scram.ServerFirstMessage(
+        client_first=client_first, salt=auth_data.salt,
+        iterations=auth_data.iterations)
 
     channel_binding = scram.CryptoDatum(b"test-channel-binding-data")
 
