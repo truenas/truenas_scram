@@ -322,7 +322,7 @@ scram_resp_t scram_compute_tls_server_end_point(const unsigned char *cert_der,
 	int mdnid = 0, pknid = 0, secbits = 0;
 	uint32_t flags = 0;
 	const EVP_MD *md = NULL;
-	unsigned char digest[EVP_MAX_MD_SIZE];
+	unsigned char *digest = NULL;
 	unsigned int digest_len = 0;
 	scram_resp_t ret = SCRAM_E_FAULT;
 
@@ -375,23 +375,30 @@ scram_resp_t scram_compute_tls_server_end_point(const unsigned char *cert_der,
 		}
 	}
 
+	/*
+	 * Sized for the largest possible digest and zeroed so the unused tail is
+	 * never heap garbage; binding_out->size carries the real digest length.
+	 */
+	digest = calloc(1, EVP_MAX_MD_SIZE);
+	if (!digest) {
+		scram_set_error(error, "calloc() failed for channel binding");
+		ret = SCRAM_E_MEMORY_ERROR;
+		goto cleanup;
+	}
+
 	if (EVP_Digest(cert_der, cert_der_len, digest, &digest_len, md, NULL) != 1) {
 		scram_set_ssl_error(error, "EVP_Digest() failed");
 		ret = SCRAM_E_CRYPTO_ERROR;
 		goto cleanup;
 	}
 
-	binding_out->data = malloc(digest_len);
-	if (!binding_out->data) {
-		scram_set_error(error, "malloc() failed for channel binding");
-		ret = SCRAM_E_MEMORY_ERROR;
-		goto cleanup;
-	}
-	memcpy(binding_out->data, digest, digest_len);
+	binding_out->data = digest;
 	binding_out->size = digest_len;
+	digest = NULL;
 	ret = SCRAM_E_SUCCESS;
 
 cleanup:
+	free(digest);
 	X509_free(cert);
 	return ret;
 }
