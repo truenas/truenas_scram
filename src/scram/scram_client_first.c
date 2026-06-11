@@ -221,7 +221,18 @@ scram_resp_t scram_build_gs2_header(char flag, const char *cb_name,
 	}
 	*out = NULL;
 
-	/* authzid is reserved for a future authorization-identity feature */
+	/*
+	 * authzid is the optional SASL authorization identity that the gs2-header
+	 * carries as its "a=" attribute: gs2-header = gs2-cbind-flag "," [ authzid ]
+	 * "," and authzid = "a=" saslname (RFC 5802 Section 7). It originates in the
+	 * GS2 GSS-API-to-SASL bridge (RFC 5801 Section 4). Per RFC 5802 Section 5.1,
+	 * a client supplies it to authenticate as the user named in "n=" but then act
+	 * as a different user (e.g. an administrator or proxy acting on someone's
+	 * behalf); when omitted -- the normal case -- the authorization identity is
+	 * derived from the authentication username. This library does not implement
+	 * authzid yet, so a non-NULL value is rejected rather than emitting an "a="
+	 * the verifier would not enforce.
+	 */
 	if (authzid) {
 		scram_set_error(error, "authzid is not yet supported");
 		return SCRAM_E_INVALID_REQUEST;

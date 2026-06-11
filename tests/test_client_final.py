@@ -23,7 +23,7 @@ def client_first():
 def client_first_with_gs2():
     """Generate a client first message with GS2 header for testing."""
     return truenas_pyscram.ClientFirstMessage(username="testuser",
-                                              gs2_header="p=tls-unique")
+                                              gs2_header="p=x-test-binding")
 
 
 @pytest.fixture
@@ -98,7 +98,7 @@ def test_client_final_message_with_channel_binding(client_first_with_gs2,
     )
     assert isinstance(msg.nonce, truenas_pyscram.CryptoDatum)
     assert isinstance(msg.client_proof, truenas_pyscram.CryptoDatum)
-    assert msg.gs2_header == "p=tls-unique"
+    assert msg.gs2_header == "p=x-test-binding"
     assert isinstance(msg.channel_binding, truenas_pyscram.CryptoDatum)
     assert bytes(msg.channel_binding) == b"fake_channel_binding_data"
 
@@ -407,7 +407,7 @@ def test_client_final_message_cbind_input_has_gs2_separator(client_first_with_gs
     # str() is "c=<base64>,r=...,p=..."; the base64 alphabet has no ',',
     # so splitting on ',' safely isolates the c= attribute.
     c_b64 = str(msg).split(',')[0][len("c="):]
-    assert base64.b64decode(c_b64) == b"p=tls-unique,,ABC"
+    assert base64.b64decode(c_b64) == b"p=x-test-binding,,ABC"
 
 
 def test_client_final_p_flag_requires_binding(client_first_with_gs2,

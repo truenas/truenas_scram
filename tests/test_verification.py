@@ -272,7 +272,7 @@ def test_verification_functions_with_channel_binding(auth_data):
     """Test verification functions with channel binding."""
     # Create client with channel binding
     client_first = truenas_pyscram.ClientFirstMessage(
-        username="testuser", gs2_header="p=tls-unique")
+        username="testuser", gs2_header="p=x-test-binding")
     server_first = truenas_pyscram.ServerFirstMessage(
         client_first=client_first, salt=auth_data.salt,
         iterations=auth_data.iterations)

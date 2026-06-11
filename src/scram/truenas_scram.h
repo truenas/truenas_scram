@@ -93,7 +93,7 @@ typedef struct scram_server_first_message {
  * p: This attribute specifies a base64-encoded ClientProof.
  */
 typedef struct scram_client_final_message {
-	char *gs2_header;                 /* GS2 header string (e.g., "n,,") */
+	char *gs2_header;                 /* GS2 header (gs2-cbind-flag), e.g. "n" or "p=tls-server-end-point" */
 	crypto_datum_t *channel_binding;  /* Raw channel binding data (not base64 encoded) */
 	crypto_datum_t nonce;             /* "r:" attribute */
 	crypto_datum_t client_proof;      /* "p:" attribute */
@@ -266,11 +266,10 @@ scram_resp_t dup_crypto_datum(const crypto_datum_t *in, crypto_datum_t *out, scr
 /**
  * @brief Build a GS2 header string for a client message.
  *
- * Assembles the GS2 header (RFC 5801 / RFC 5802 Section 7) WITHOUT the trailing
- * ",," separator -- matching the convention stored in
- * scram_client_first_t.gs2_header and consumed by the serializers, which append
- * the separator themselves. The result is suitable to pass as the @p gs2_header
- * argument of scram_create_client_first_message().
+ * Assembles the gs2-cbind-flag prefix of the GS2 header (RFC 5801 /
+ * RFC 5802 Section 7): "n", "y", or "p=<cb-name>". The serializers append the
+ * ",," that terminates the GS2 header, so the result is suitable to pass as the
+ * @p gs2_header argument of scram_create_client_first_message().
  *
  * @param[in]	flag - the gs2-cbind-flag: 'n' (no channel binding), 'y'
  *		(channel binding supported but not used), or 'p' (channel binding

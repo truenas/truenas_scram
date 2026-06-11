@@ -6,7 +6,7 @@ A Python C extension implementing SCRAM (Salted Challenge Response Authenticatio
 
 - Complete RFC 5802 SCRAM-SHA-512 implementation
 - Python C extension for high performance
-- Support for channel binding (tls-unique, tls-exporter)
+- Support for channel binding (tls-server-end-point)
 - Comprehensive message validation and verification
 - Server-side and client-side authentication functions
 - Cryptographically secure nonce generation

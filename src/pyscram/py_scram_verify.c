@@ -261,7 +261,6 @@ py_compute_tls_server_end_point(PyObject *self, PyObject *args, PyObject *kwds)
 	PyObject *result = NULL;
 	static char *kwlist[] = {"cert_der", NULL};
 
-	/* read-only view into a bytes-like object (matches CryptoDatum's "y#") */
 	if (!PyArg_ParseTupleAndKeywords(args, kwds, "y#", kwlist,
 					 &cert_der, &cert_der_len)) {
 		return NULL;

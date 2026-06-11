@@ -33,14 +33,14 @@ def test_client_first_parse_with_api_key():
 
 def test_client_first_parse_with_gs2_header():
     """Test parsing client-first-message with GS2 header."""
-    msg1 = scram.ClientFirstMessage(username="testuser", gs2_header="p=tls-unique")
+    msg1 = scram.ClientFirstMessage(username="testuser", gs2_header="p=x-test-binding")
     rfc_str = str(msg1)
 
     msg2 = scram.ClientFirstMessage(rfc_string=rfc_str)
 
     assert str(msg1) == str(msg2)
     assert msg2.username == "testuser"
-    assert msg2.gs2_header == "p=tls-unique"
+    assert msg2.gs2_header == "p=x-test-binding"
 
 
 def test_client_first_no_params_error():
