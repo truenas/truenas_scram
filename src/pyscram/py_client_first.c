@@ -10,13 +10,17 @@ py_client_first_init(py_client_first_t *self, PyObject *args, PyObject *kwds)
 	uint32_t api_key_id = 0;
 	const char *gs2_header = NULL;
 	const char *rfc_string = NULL;
+	const char *channel_binding_type = NULL;
+	char *built_gs2_header = NULL;
 	char *serialized = NULL;
 	scram_error_t error = {0};
 	scram_resp_t ret;
-	static char *kwlist[] = {"username", "api_key_id", "gs2_header", "rfc_string", NULL};
+	static char *kwlist[] = {"username", "api_key_id", "gs2_header", "rfc_string",
+				 "channel_binding_type", NULL};
 
-	if (!PyArg_ParseTupleAndKeywords(args, kwds, "|$sIss", kwlist,
-					 &username, &api_key_id, &gs2_header, &rfc_string)) {
+	if (!PyArg_ParseTupleAndKeywords(args, kwds, "|$sIsss", kwlist,
+					 &username, &api_key_id, &gs2_header, &rfc_string,
+					 &channel_binding_type)) {
 		return -1;
 	}
 
@@ -33,6 +37,24 @@ py_client_first_init(py_client_first_t *self, PyObject *args, PyObject *kwds)
 		return -1;
 	}
 
+	if (rfc_string && gs2_header) {
+		PyErr_SetString(PyExc_ValueError,
+				"Cannot specify both rfc_string and gs2_header parameters");
+		return -1;
+	}
+
+	if (channel_binding_type && rfc_string) {
+		PyErr_SetString(PyExc_ValueError,
+				"Cannot specify both rfc_string and channel_binding_type parameters");
+		return -1;
+	}
+
+	if (channel_binding_type && gs2_header) {
+		PyErr_SetString(PyExc_ValueError,
+				"Cannot specify both gs2_header and channel_binding_type parameters");
+		return -1;
+	}
+
 	if (rfc_string) {
 		/* Parse from RFC string */
 		Py_BEGIN_ALLOW_THREADS
@@ -46,6 +68,18 @@ py_client_first_init(py_client_first_t *self, PyObject *args, PyObject *kwds)
 		Py_END_ALLOW_THREADS
 	} else {
 		/* Create new message from parameters */
+		if (channel_binding_type) {
+			/* Build a "p=<cb-name>" GS2 header ('p' = channel binding used) */
+			ret = scram_build_gs2_header('p', channel_binding_type, NULL,
+						     &built_gs2_header, &error);
+			if (ret != SCRAM_E_SUCCESS) {
+				set_exc_from_scram(ret, &error,
+						   "Failed to build GS2 header");
+				return -1;
+			}
+			gs2_header = built_gs2_header;
+		}
+
 		Py_BEGIN_ALLOW_THREADS
 		ret = scram_create_client_first_message(username, api_key_id, gs2_header,
 							&self->msg, &error);
@@ -55,6 +89,9 @@ py_client_first_init(py_client_first_t *self, PyObject *args, PyObject *kwds)
 								   &error);
 		}
 		Py_END_ALLOW_THREADS
+
+		free(built_gs2_header);
+		built_gs2_header = NULL;
 	}
 
 	if (ret != SCRAM_E_SUCCESS) {
@@ -183,7 +220,7 @@ py_client_first_repr(py_client_first_t *self)
 }
 
 PyDoc_STRVAR(py_client_first__doc__,
-"ClientFirstMessage(username=None, api_key_id=0, gs2_header=None, rfc_string=None)\n"
+"ClientFirstMessage(username=None, api_key_id=0, gs2_header=None, rfc_string=None, channel_binding_type=None)\n"
 "----------------------------------------------------------------------------------\n\n"
 "SCRAM client first message as specified in RFC 5802 Section 5.1.\n\n"
 "This message contains the username (with optional API key ID),\n"
@@ -198,8 +235,14 @@ PyDoc_STRVAR(py_client_first__doc__,
 "    API key identifier (0 if not used).\n"
 "    Only used when creating a new message (not with rfc_string).\n"
 "gs2_header : str, optional\n"
-"    GS2 header string (None for no channel binding).\n"
+"    GS2 header string without the trailing ',,' (None for no channel\n"
+"    binding). Mutually exclusive with channel_binding_type.\n"
 "    Only used when creating a new message (not with rfc_string).\n"
+"channel_binding_type : str, optional\n"
+"    Channel-binding type name (e.g. CB_TLS_SERVER_END_POINT). Builds a\n"
+"    'p=<name>' GS2 header for you, so you do not hand-format it. Mutually\n"
+"    exclusive with gs2_header and rfc_string. Supply the matching binding\n"
+"    value as ClientFinalMessage(channel_binding=...).\n"
 "rfc_string : str, optional\n"
 "    RFC 5802 formatted client-first-message string to parse.\n"
 "    If provided, username, api_key_id, and gs2_header must not be specified.\n\n"

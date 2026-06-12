@@ -32,11 +32,17 @@ static scram_resp_t extract_gs2_header(const crypto_datum_t *raw_data,
 	gs2_separator_pos = strstr(null_terminated_data, GS2_SEPARATOR);
 
 	if (gs2_separator_pos) {
-		/* Null-terminate at end of GS2 separator */
-		gs2_separator_pos[strlen(GS2_SEPARATOR)] = '\0';
+		/*
+		 * cbind-input is gs2-header followed by optional cbind-data
+		 * (RFC 5802 Section 7). Split at the ",," that terminates the
+		 * gs2-header: the flag/authzid prefix becomes the stored header, and
+		 * gs2_header_len counts the ",," so any cbind-data after it is read
+		 * from the correct offset.
+		 */
+		gs2_separator_pos[0] = '\0';
 		gs2_header_len = gs2_separator_pos - null_terminated_data + strlen(GS2_SEPARATOR);
 	} else {
-		/* No GS2 separator found, treat entire data as GS2 header */
+		/* No ",," present: the entire input is the gs2-header */
 		gs2_header_len = raw_data->size;
 	}
 
@@ -159,13 +165,17 @@ scram_resp_t scram_serialize_client_final_message(scram_client_final_t *msg,
 		return SCRAM_E_INVALID_REQUEST;
 	}
 
-	/* Use provided GS2 header or default to no channel binding */
-	gs2_header_to_use = msg->gs2_header ? msg->gs2_header :
-					    GS2_FLAG_NO_CB_SUPPORT GS2_SEPARATOR;
+	/*
+	 * The c= attribute is the base64 of cbind-input = gs2-header [ cbind-data ]
+	 * (RFC 5802 Section 7). msg->gs2_header holds the gs2-cbind-flag prefix,
+	 * defaulting to "n" (no channel binding); GS2_SEPARATOR (",,") terminates
+	 * the gs2-header and is followed by the channel-binding data, if any.
+	 */
+	gs2_header_to_use = msg->gs2_header ? msg->gs2_header : GS2_FLAG_NO_CB_SUPPORT;
 	gs2_header_len = strlen(gs2_header_to_use);
 
-	/* Create channel binding data: GS2 header + channel binding data */
-	channel_binding_data.size = gs2_header_len +
+	/* Create channel binding data: GS2 header + GS2 separator + channel binding data */
+	channel_binding_data.size = gs2_header_len + strlen(GS2_SEPARATOR) +
 				   (msg->channel_binding ? msg->channel_binding->size : 0);
 	channel_binding_data.data = malloc(channel_binding_data.size);
 	if (!channel_binding_data.data) {
@@ -173,12 +183,14 @@ scram_resp_t scram_serialize_client_final_message(scram_client_final_t *msg,
 		return SCRAM_E_MEMORY_ERROR;
 	}
 
-	/* Copy GS2 header */
+	/* Copy GS2 header followed by the GS2 separator */
 	memcpy(channel_binding_data.data, gs2_header_to_use, gs2_header_len);
+	memcpy(channel_binding_data.data + gs2_header_len,
+	       GS2_SEPARATOR, strlen(GS2_SEPARATOR));
 
 	/* Append channel binding data if present */
 	if (msg->channel_binding && msg->channel_binding->size > 0) {
-		memcpy(channel_binding_data.data + gs2_header_len,
+		memcpy(channel_binding_data.data + gs2_header_len + strlen(GS2_SEPARATOR),
 		       msg->channel_binding->data,
 		       msg->channel_binding->size);
 	}
@@ -361,6 +373,34 @@ cleanup:
 	return ret;
 }
 
+static scram_resp_t check_gs2_cb_consistency(const char *gs2_header,
+					     const crypto_datum_t *channel_binding_data,
+					     scram_error_t *error)
+{
+	/*
+	 * Validate that the client-first gs2 channel-binding flag agrees with
+	 * whether channel-binding data was supplied (RFC 5802 Section 6): a "p"
+	 * flag requires cbind-data, while "n" and "y" must carry none. A missing or
+	 * empty gs2 header is treated as the default "n". Returning an error makes
+	 * the client fail fast instead of emitting a malformed or insecure
+	 * client-final-message.
+	 */
+	char gs2_flag = (gs2_header && gs2_header[0]) ?
+			gs2_header[0] : GS2_FLAG_NO_CB_SUPPORT[0];
+	bool have_cb = SCRAM_DATUM_IS_VALID(channel_binding_data);
+
+	if (gs2_flag == GS2_FLAG_CB_USED[0] && !have_cb) {
+		scram_set_error(error, "gs2 flag 'p' requires channel binding data");
+		return SCRAM_E_INVALID_REQUEST;
+	}
+	if (gs2_flag != GS2_FLAG_CB_USED[0] && have_cb) {
+		scram_set_error(error, "channel binding data provided but gs2 flag "
+				"is not 'p'");
+		return SCRAM_E_INVALID_REQUEST;
+	}
+	return SCRAM_E_SUCCESS;
+}
+
 scram_resp_t scram_create_client_final_message(const crypto_datum_t *channel_binding_data,
 					      const crypto_datum_t *client_key,
 					      const crypto_datum_t *stored_key,
@@ -421,6 +461,13 @@ scram_resp_t scram_create_client_final_message(const crypto_datum_t *channel_bin
 		}
 	}
 
+	/* Reject inconsistent gs2 flag / channel-binding-data combinations. */
+	ret = check_gs2_cb_consistency(client->gs2_header, channel_binding_data,
+				       error);
+	if (ret != SCRAM_E_SUCCESS) {
+		goto cleanup;
+	}
+
 	/* Create client-first-message-bare for AuthMessage */
 	ret = scram_serialize_client_first_message(client, &client_first_bare, true, error);
 	if (ret != SCRAM_E_SUCCESS) {
@@ -478,10 +525,98 @@ cleanup_resources:
 	return ret;
 }
 
-scram_resp_t scram_verify_client_final_message(const scram_client_first_t *cfirst,
+static scram_resp_t enforce_channel_binding_policy(const scram_client_final_t *cfinal,
+						   const crypto_datum_t *expected_channel_binding,
+						   bool require_channel_binding,
+						   scram_error_t *error)
+{
+	bool server_supports_cb = SCRAM_DATUM_IS_VALID(expected_channel_binding);
+	bool cb_match = false;
+	scram_resp_t ret;
+	char flag;
+
+	/*
+	 * Channel-binding policy (RFC 5802 Section 6, RFC 5801). The caller has
+	 * already verified the client proof, which cryptographically covers the c=
+	 * attribute (gs2 header + cbind-data); this additionally asserts the
+	 * cbind-data equals THIS server's binding -- which is what detects a
+	 * TLS-terminating MITM relaying an otherwise-valid proof.
+	 *
+	 * Policy applies only when the server supports channel binding (an expected
+	 * value was supplied) or requires it; otherwise this is a plain (non-PLUS)
+	 * verification and the binding is ignored for backward compatibility.
+	 */
+	if (!server_supports_cb && !require_channel_binding) {
+		return SCRAM_E_SUCCESS;
+	}
+
+	/*
+	 * A missing/empty gs2 header means "no channel binding" -- the same as an
+	 * explicit "n" and the default applied during serialization. Treat it as
+	 * 'n' so the common no-CB client is handled consistently (rejected only
+	 * when channel binding is required), not as an invalid flag.
+	 */
+	flag = (cfinal->gs2_header && cfinal->gs2_header[0]) ?
+	       cfinal->gs2_header[0] : GS2_FLAG_NO_CB_SUPPORT[0];
+
+	if (flag == GS2_FLAG_CB_USED[0]) {
+		/* "p": client used channel binding -> it must match ours */
+		if (!server_supports_cb) {
+			scram_set_error(error, "client used channel binding but no "
+					"server channel binding is configured");
+			return SCRAM_E_AUTH_FAILED;
+		}
+		if (!SCRAM_DATUM_IS_VALID(cfinal->channel_binding)) {
+			scram_set_error(error, "channel-binding flag set but no "
+					"binding data present");
+			return SCRAM_E_AUTH_FAILED;
+		}
+		ret = scram_constant_time_compare(cfinal->channel_binding,
+						  expected_channel_binding,
+						  &cb_match, error);
+		if (ret != SCRAM_E_SUCCESS) {
+			return ret;
+		}
+		if (!cb_match) {
+			scram_set_error(error, "channel binding mismatch");
+			return SCRAM_E_AUTH_FAILED;
+		}
+	} else if (flag == GS2_FLAG_CB_SUPPORT_NOT_USED[0]) {
+		/*
+		 * "y": client supports channel binding but believed the server did
+		 * not. Since this server does, it is a downgrade and MUST fail
+		 * (RFC 5802 Section 6).
+		 */
+		scram_set_error(error, "channel-binding downgrade detected "
+				"(gs2 'y' flag)");
+		return SCRAM_E_AUTH_FAILED;
+	} else if (flag == GS2_FLAG_NO_CB_SUPPORT[0]) {
+		/* "n": client does not support channel binding */
+		if (require_channel_binding) {
+			scram_set_error(error, "channel binding required but the "
+					"client did not use it");
+			return SCRAM_E_AUTH_FAILED;
+		}
+	} else {
+		/*
+		 * Not n/y/p: the gs2-cbind-flag is outside the RFC 5802 grammar.
+		 * Unlike the branches above -- which reject *valid* flags on policy
+		 * grounds -- this is a malformed message, so report it as a parse
+		 * error rather than an auth failure.
+		 */
+		scram_set_error(error, "invalid gs2 channel-binding flag");
+		return SCRAM_E_PARSE_ERROR;
+	}
+
+	return SCRAM_E_SUCCESS;
+}
+
+scram_resp_t scram_verify_client_final_message_cb(const scram_client_first_t *cfirst,
 					      const scram_server_first_t *sfirst,
 					      const scram_client_final_t *cfinal,
 					      const crypto_datum_t *stored_key,
+					      const crypto_datum_t *expected_channel_binding,
+					      bool require_channel_binding,
 					      scram_error_t *error)
 {
 	crypto_datum_t auth_message = {0};
@@ -586,6 +721,13 @@ scram_resp_t scram_verify_client_final_message(const scram_client_first_t *cfirs
 		goto cleanup;
 	}
 
+	/* Enforce the server's channel-binding policy now that the proof checks out. */
+	ret = enforce_channel_binding_policy(cfinal, expected_channel_binding,
+					     require_channel_binding, error);
+	if (ret != SCRAM_E_SUCCESS) {
+		goto cleanup;
+	}
+
 	ret = SCRAM_E_SUCCESS;
 
 cleanup:
@@ -599,4 +741,15 @@ cleanup:
 	crypto_datum_clear(&received_client_key, true);
 
 	return ret;
+}
+
+/* Back-compat: plain (non channel-bound) verification. */
+scram_resp_t scram_verify_client_final_message(const scram_client_first_t *cfirst,
+					      const scram_server_first_t *sfirst,
+					      const scram_client_final_t *cfinal,
+					      const crypto_datum_t *stored_key,
+					      scram_error_t *error)
+{
+	return scram_verify_client_final_message_cb(cfirst, sfirst, cfinal, stored_key,
+						    NULL, false, error);
 }
