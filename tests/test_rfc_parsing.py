@@ -353,3 +353,12 @@ def test_username_api_key_combinations(username, api_key_id):
     assert str(msg1) == str(msg2)
     assert msg2.username == username
     assert msg2.api_key_id == api_key_id
+
+
+def test_parse_rejects_equals_in_username():
+    """RFC 5802 Section 5.1: a server MUST fail on a username containing a '='
+    that is not a valid =2C/=3D escape. This library rejects '=' in the parsed
+    username outright (a raw ',' cannot appear: it terminates the attribute)."""
+    bad_rfc = "n,,n=user=name,r=" + "A" * 43
+    with pytest.raises(scram.ScramError, match="username must not contain"):
+        scram.ClientFirstMessage(rfc_string=bad_rfc)
