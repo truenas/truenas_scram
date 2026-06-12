@@ -289,3 +289,14 @@ def test_client_first_channel_binding_type_conflicts_rfc_string():
         truenas_pyscram.ClientFirstMessage(
             rfc_string=rfc,
             channel_binding_type=truenas_pyscram.CB_TLS_SERVER_END_POINT)
+
+
+@pytest.mark.parametrize("bad_username", ["user=name", "user,name", "a=2Cb"])
+def test_client_first_rejects_reserved_username_chars(bad_username):
+    """RFC 5802 Section 5.1 reserves ',' and '=' in the SCRAM username (carried
+    on the wire as =2C/=3D). TrueNAS usernames never contain them, so the library
+    rejects the whole class -- raw characters and =2C/=3D escapes alike -- rather
+    than emitting an ambiguous message."""
+    with pytest.raises(truenas_pyscram.ScramError,
+                       match="username must not contain"):
+        truenas_pyscram.ClientFirstMessage(username=bad_username)

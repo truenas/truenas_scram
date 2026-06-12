@@ -368,16 +368,34 @@ scram_resp_t scram_verify_client_final_message(const scram_client_first_t *cfirs
  * @brief Verify a SCRAM client-final-message with channel binding (SCRAM-PLUS).
  *
  * Like scram_verify_client_final_message(), but additionally enforces channel
- * binding per RFC 5802 6 / RFC 5801. When @p expected_channel_binding is non-NULL
- * the server is treated as channel-binding-capable: a "p" gs2 flag's cbind-data
- * must equal @p expected_channel_binding (constant-time), a "y" flag is rejected
- * as a downgrade, and a "n" flag is rejected only when @p require_channel_binding
- * is true. With a NULL expected binding and require=false this behaves exactly
- * like the plain verification.
+ * binding per RFC 5802 Section 6 / RFC 5801. The nonce and ClientProof are
+ * verified exactly as in the plain function; the channel-binding policy is then
+ * applied as follows.
+ *
+ * @p expected_channel_binding being non-NULL is how the caller declares that
+ * *this server* supports channel binding. When it is supplied:
+ *   - a "p" gs2 flag's cbind-data must equal @p expected_channel_binding
+ *     (constant-time), and its cb-name must be the supported type
+ *     (SCRAM_CB_TLS_SERVER_END_POINT, RFC 5929); otherwise authentication fails;
+ *   - a "y" gs2 flag is rejected as a downgrade (RFC 5802 Section 6); and
+ *   - a "n" gs2 flag is rejected only when @p require_channel_binding is true.
+ * With a NULL expected binding and require=false this behaves like the plain
+ * verification (a "p" client is still rejected, since the server has nothing to
+ * validate its c= against).
+ *
+ * IMPORTANT (contract): a server that is channel-binding-capable (i.e. running
+ * over TLS) MUST pass its @p expected_channel_binding on every call; omitting it
+ * disables "y"-downgrade detection for that exchange. Passing
+ * @p require_channel_binding = true with a NULL @p expected_channel_binding is a
+ * caller error and is rejected with SCRAM_E_INVALID_REQUEST (there would be no
+ * binding to enforce). An authzid in the client's gs2-header is not supported
+ * and causes authentication to fail rather than being ignored.
  *
  * @param[in] expected_channel_binding - this server's channel binding value
- *            (e.g. the RFC 5929 tls-server-end-point hash), or NULL.
- * @param[in] require_channel_binding - reject clients that do not use binding.
+ *            (the RFC 5929 tls-server-end-point hash), or NULL if the server
+ *            does not support channel binding.
+ * @param[in] require_channel_binding - reject clients that do not use binding;
+ *            requires a non-NULL @p expected_channel_binding.
  */
 scram_resp_t scram_verify_client_final_message_cb(const scram_client_first_t *cfirst,
 					      const scram_server_first_t *sfirst,
