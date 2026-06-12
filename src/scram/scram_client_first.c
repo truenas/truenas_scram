@@ -287,6 +287,18 @@ scram_resp_t scram_create_client_first_message(const char *username,
 		return SCRAM_E_INVALID_REQUEST;
 	}
 
+	/*
+	 * Reject ',' and '=' in the username up front. The SCRAM message is
+	 * comma-separated and uses '=' for the "=2C"/"=3D" username escapes (RFC 5802
+	 * Section 5.1) that this library does not emit. Mirroring the parser's check
+	 * here keeps the library from ever building a username its own verifier would
+	 * reject.
+	 */
+	if (strpbrk(username, "=,") != NULL) {
+		scram_set_error(error, "username must not contain '=' or ','");
+		return SCRAM_E_FORMAT_ERROR;
+	}
+
 	msg = calloc(1, sizeof(*msg));
 	if (!msg) {
 		scram_set_error(error, "calloc() failed");

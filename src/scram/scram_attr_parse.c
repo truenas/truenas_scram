@@ -164,6 +164,22 @@ scram_resp_t scram_parse_principal(char *str_in,
 		principal_out->api_key_id = api_key_id;
 	}
 
+	/*
+	 * RFC 5802 Section 5.1 carries ',' and '=' in a SCRAM username as the
+	 * escapes "=2C" and "=3D", and requires the server to fail the
+	 * authentication when a '=' is not part of such an escape. TrueNAS usernames
+	 * cannot contain ',' or '=' in the first place, so rather than decode the
+	 * escapes we reject the whole class -- both raw characters and any
+	 * "=2C"/"=3D" sequence -- which keeps the username unambiguous and fails
+	 * closed. (A raw ',' cannot reach here anyway; it terminates the attribute
+	 * during tokenization.)
+	 */
+	if (strpbrk(str_in, "=,") != NULL) {
+		scram_set_error(error, "%s: username must not contain '=' or ','",
+				str_in);
+		return SCRAM_E_FORMAT_ERROR;
+	}
+
 	// We need to SASLPREP the username str and verify that it
 	// matches the raw str
 	ret = scram_saslprep(str_in,

@@ -525,6 +525,51 @@ cleanup_resources:
 	return ret;
 }
 
+/*
+ * Validate the exact gs2-header echoed in the client's c= attribute. A valid
+ * header is the bare gs2-cbind-flag ("n" or "y"), or "p=<cb-name>" naming a
+ * channel-binding type this server supports.
+ *
+ * SCRAM_CB_TLS_SERVER_END_POINT (RFC 5929) is the only type this library
+ * computes; extend this check if more are added. Rejecting anything else closes
+ * two gaps the ClientProof alone does not cover (the proof binds whatever the
+ * client committed to, but says nothing about whether the server accepts it):
+ *   - an "a=" authzid (RFC 5801 Section 4 / RFC 5802 Section 7) -- this library
+ *     does not implement authzid, so a header carrying one must fail rather than
+ *     be silently ignored; and
+ *   - a "p" naming an unsupported channel-binding type (RFC 5802 Section 6: "if
+ *     the channel binding flag was 'p' and the server does not support the
+ *     indicated channel binding type, then the server MUST fail
+ *     authentication").
+ */
+static scram_resp_t validate_gs2_cbind_header(const char *gs2_header, char flag,
+					      scram_error_t *error)
+{
+	if (!gs2_header || !gs2_header[0]) {
+		/* Absent/empty header is the default "n"; nothing more to check. */
+		return SCRAM_E_SUCCESS;
+	}
+
+	if (flag == GS2_FLAG_CB_USED[0]) {
+		/* Require exactly "p=<supported-cb-name>" with no trailing authzid. */
+		if (gs2_header[1] != '=' ||
+		    strcmp(gs2_header + 2, SCRAM_CB_TLS_SERVER_END_POINT) != 0) {
+			scram_set_error(error, "unsupported channel-binding type or "
+					"unexpected authzid in gs2 'p' header");
+			return SCRAM_E_AUTH_FAILED;
+		}
+		return SCRAM_E_SUCCESS;
+	}
+
+	/* "n" / "y": the header must be just the one-character flag (no authzid). */
+	if (gs2_header[1] != '\0') {
+		scram_set_error(error, "unexpected authzid or trailing data in gs2 "
+				"channel-binding header");
+		return SCRAM_E_AUTH_FAILED;
+	}
+	return SCRAM_E_SUCCESS;
+}
+
 static scram_resp_t enforce_channel_binding_policy(const scram_client_final_t *cfinal,
 						   const crypto_datum_t *expected_channel_binding,
 						   bool require_channel_binding,
@@ -542,22 +587,57 @@ static scram_resp_t enforce_channel_binding_policy(const scram_client_final_t *c
 	 * cbind-data equals THIS server's binding -- which is what detects a
 	 * TLS-terminating MITM relaying an otherwise-valid proof.
 	 *
-	 * Policy applies only when the server supports channel binding (an expected
-	 * value was supplied) or requires it; otherwise this is a plain (non-PLUS)
-	 * verification and the binding is ignored for backward compatibility.
-	 */
-	if (!server_supports_cb && !require_channel_binding) {
-		return SCRAM_E_SUCCESS;
-	}
-
-	/*
 	 * A missing/empty gs2 header means "no channel binding" -- the same as an
-	 * explicit "n" and the default applied during serialization. Treat it as
-	 * 'n' so the common no-CB client is handled consistently (rejected only
-	 * when channel binding is required), not as an invalid flag.
+	 * explicit "n" and the default applied during serialization. Treat it as 'n'
+	 * so the common no-CB client is handled consistently, not as an invalid flag.
 	 */
 	flag = (cfinal->gs2_header && cfinal->gs2_header[0]) ?
 	       cfinal->gs2_header[0] : GS2_FLAG_NO_CB_SUPPORT[0];
+
+	/*
+	 * RFC 5802 Section 5.1: the gs2-cbind-flag is "n", "y", or "p"; "otherwise,
+	 * the message is invalid and authentication MUST fail." Check this (and the
+	 * full header form) before the backward-compatible shortcut below so a
+	 * malformed flag or an unsupported binding type is never accepted as a no-op
+	 * on the plain (non-PLUS) path.
+	 */
+	if (flag != GS2_FLAG_NO_CB_SUPPORT[0] &&
+	    flag != GS2_FLAG_CB_SUPPORT_NOT_USED[0] &&
+	    flag != GS2_FLAG_CB_USED[0]) {
+		scram_set_error(error, "invalid gs2 channel-binding flag");
+		return SCRAM_E_PARSE_ERROR;
+	}
+
+	ret = validate_gs2_cbind_header(cfinal->gs2_header, flag, error);
+	if (ret != SCRAM_E_SUCCESS) {
+		return ret;
+	}
+
+	/*
+	 * A server that requires channel binding must supply the binding to validate
+	 * against (RFC 5802 Section 6: the server validates c= against its own
+	 * binding). require + no binding is a caller misconfiguration we cannot
+	 * honor, so reject it explicitly rather than silently treating the request as
+	 * unbound.
+	 */
+	if (require_channel_binding && !server_supports_cb) {
+		scram_set_error(error, "channel binding required but no server "
+				"channel binding is configured");
+		return SCRAM_E_INVALID_REQUEST;
+	}
+
+	/*
+	 * Plain (non-PLUS) verification: when the server neither supplied a binding
+	 * nor requires one, an "n"/"y" client carries no cbind-data to validate, so
+	 * accept it for backward compatibility. A "p" client, however, committed
+	 * cbind-data that RFC 5802 Section 6 requires the server to validate against
+	 * its own binding -- impossible without one -- so it must not take this
+	 * shortcut: it falls through to the "p" branch and fails below.
+	 */
+	if (!server_supports_cb && !require_channel_binding &&
+	    flag != GS2_FLAG_CB_USED[0]) {
+		return SCRAM_E_SUCCESS;
+	}
 
 	if (flag == GS2_FLAG_CB_USED[0]) {
 		/* "p": client used channel binding -> it must match ours */
@@ -584,28 +664,20 @@ static scram_resp_t enforce_channel_binding_policy(const scram_client_final_t *c
 	} else if (flag == GS2_FLAG_CB_SUPPORT_NOT_USED[0]) {
 		/*
 		 * "y": client supports channel binding but believed the server did
-		 * not. Since this server does, it is a downgrade and MUST fail
-		 * (RFC 5802 Section 6).
+		 * not. We only reach here when the server does support it (the require
+		 * guard above already rejected require + no binding), so it is a
+		 * downgrade and MUST fail (RFC 5802 Section 6).
 		 */
 		scram_set_error(error, "channel-binding downgrade detected "
 				"(gs2 'y' flag)");
 		return SCRAM_E_AUTH_FAILED;
-	} else if (flag == GS2_FLAG_NO_CB_SUPPORT[0]) {
-		/* "n": client does not support channel binding */
+	} else {
+		/* "n": client does not support channel binding (flag validated above) */
 		if (require_channel_binding) {
 			scram_set_error(error, "channel binding required but the "
 					"client did not use it");
 			return SCRAM_E_AUTH_FAILED;
 		}
-	} else {
-		/*
-		 * Not n/y/p: the gs2-cbind-flag is outside the RFC 5802 grammar.
-		 * Unlike the branches above -- which reject *valid* flags on policy
-		 * grounds -- this is a malformed message, so report it as a parse
-		 * error rather than an auth failure.
-		 */
-		scram_set_error(error, "invalid gs2 channel-binding flag");
-		return SCRAM_E_PARSE_ERROR;
 	}
 
 	return SCRAM_E_SUCCESS;
@@ -632,6 +704,22 @@ scram_resp_t scram_verify_client_final_message_cb(const scram_client_first_t *cf
 	if (!cfirst || !sfirst || !cfinal || !SCRAM_DATUM_IS_VALID(stored_key)) {
 		scram_set_error(error, "invalid input parameters");
 		return SCRAM_E_INVALID_REQUEST;
+	}
+
+	/*
+	 * RFC 5802 Section 5.1: "The server MUST verify that the nonce sent by the
+	 * client in the second message is the same as the one sent by the server in
+	 * its first message." The ClientProof verified below also covers the nonce
+	 * (r= is part of the AuthMessage), but check it explicitly so a mismatch is
+	 * rejected here rather than surfacing only as a proof failure. The nonce is
+	 * public, so a plain comparison (not constant-time) is sufficient.
+	 */
+	if (!SCRAM_DATUM_IS_VALID(&cfinal->nonce) ||
+	    !SCRAM_DATUM_IS_VALID(&sfirst->nonce) ||
+	    cfinal->nonce.size != sfirst->nonce.size ||
+	    memcmp(cfinal->nonce.data, sfirst->nonce.data, sfirst->nonce.size) != 0) {
+		scram_set_error(error, "client nonce does not match server nonce");
+		return SCRAM_E_AUTH_FAILED;
 	}
 
 	/* Create client-first-message-bare for AuthMessage */
