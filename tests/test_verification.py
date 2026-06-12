@@ -270,9 +270,10 @@ def test_verify_server_signature_invalid_server_key(client_first,
 
 def test_verification_functions_with_channel_binding(auth_data):
     """Test verification functions with channel binding."""
-    # Create client with channel binding
+    # Create client with channel binding (the only supported cb-name)
     client_first = truenas_pyscram.ClientFirstMessage(
-        username="testuser", gs2_header="p=x-test-binding")
+        username="testuser",
+        channel_binding_type=truenas_pyscram.CB_TLS_SERVER_END_POINT)
     server_first = truenas_pyscram.ServerFirstMessage(
         client_first=client_first, salt=auth_data.salt,
         iterations=auth_data.iterations)
@@ -289,10 +290,12 @@ def test_verification_functions_with_channel_binding(auth_data):
         client_final=client_final, stored_key=auth_data.stored_key,
         server_key=auth_data.server_key)
 
-    # Both verifications should succeed
+    # Both verifications should succeed (server supplies the matching binding;
+    # a "p" client is rejected without one -- see the dedicated test below)
     truenas_pyscram.verify_client_final_message(
         client_first=client_first, server_first=server_first,
-        client_final=client_final, stored_key=auth_data.stored_key)
+        client_final=client_final, stored_key=auth_data.stored_key,
+        channel_binding=channel_binding)
     truenas_pyscram.verify_server_signature(
         client_first=client_first, server_first=server_first,
         client_final=client_final, server_final=server_final,
@@ -514,3 +517,104 @@ def test_verify_client_final_y_flag_downgrade_rejected(auth_data):
             client_first=client_first, server_first=server_first,
             client_final=client_final, stored_key=auth_data.stored_key,
             channel_binding=truenas_pyscram.CryptoDatum(b"A" * 32))
+
+
+def test_verify_client_final_p_flag_no_server_binding_rejected(auth_data):
+    """A 'p' client must fail when the server has no binding to validate its c=
+    against, even when channel binding is not required (RFC 5802 Section 6: the
+    server MUST always validate the client's c=)."""
+    binding = truenas_pyscram.compute_tls_server_end_point(_self_signed_cert_der())
+    client_first, server_first, client_final = _channel_bound_client(
+        auth_data, binding)
+
+    # No server binding supplied, require_channel_binding defaults to False.
+    with pytest.raises(truenas_pyscram.ScramError, match="no server channel binding"):
+        truenas_pyscram.verify_client_final_message(
+            client_first=client_first, server_first=server_first,
+            client_final=client_final, stored_key=auth_data.stored_key)
+
+
+def test_verify_client_final_p_flag_unsupported_cb_name_rejected(auth_data):
+    """RFC 5802 Section 6: a 'p' client naming a channel-binding type the server
+    does not support MUST fail, even when the binding *value* matches. tls-unique
+    is a real RFC 5929 type, but this library only supports tls-server-end-point."""
+    binding = truenas_pyscram.CryptoDatum(b"A" * 32)
+    client_first = truenas_pyscram.ClientFirstMessage(
+        username="testuser", gs2_header="p=tls-unique")
+    server_first = truenas_pyscram.ServerFirstMessage(
+        client_first=client_first, salt=auth_data.salt,
+        iterations=auth_data.iterations)
+    client_final = truenas_pyscram.ClientFinalMessage(
+        client_first=client_first, server_first=server_first,
+        client_key=auth_data.client_key, stored_key=auth_data.stored_key,
+        channel_binding=binding)
+
+    with pytest.raises(truenas_pyscram.ScramError,
+                       match="unsupported channel-binding type"):
+        truenas_pyscram.verify_client_final_message(
+            client_first=client_first, server_first=server_first,
+            client_final=client_final, stored_key=auth_data.stored_key,
+            channel_binding=binding, require_channel_binding=True)
+
+
+def test_verify_client_final_require_without_server_binding_rejected(auth_data):
+    """require_channel_binding with no server binding to enforce is a caller
+    misconfiguration and must be rejected, not silently treated as unbound
+    (RFC 5802 Section 6: the server validates c= against its own binding)."""
+    client_first = truenas_pyscram.ClientFirstMessage(username="testuser")
+    server_first = truenas_pyscram.ServerFirstMessage(
+        client_first=client_first, salt=auth_data.salt,
+        iterations=auth_data.iterations)
+    client_final = truenas_pyscram.ClientFinalMessage(
+        client_first=client_first, server_first=server_first,
+        client_key=auth_data.client_key, stored_key=auth_data.stored_key)
+
+    with pytest.raises(truenas_pyscram.ScramError,
+                       match="no server channel binding is configured"):
+        truenas_pyscram.verify_client_final_message(
+            client_first=client_first, server_first=server_first,
+            client_final=client_final, stored_key=auth_data.stored_key,
+            require_channel_binding=True)
+
+
+def test_verify_client_final_invalid_gs2_flag_rejected(auth_data):
+    """RFC 5802 Section 5.1: the gs2-cbind-flag must be n/y/p; anything else is a
+    malformed message and authentication MUST fail -- including on the plain,
+    non-PLUS verification path where no binding is supplied or required."""
+    client_first = truenas_pyscram.ClientFirstMessage(
+        username="testuser", gs2_header="z")
+    server_first = truenas_pyscram.ServerFirstMessage(
+        client_first=client_first, salt=auth_data.salt,
+        iterations=auth_data.iterations)
+    client_final = truenas_pyscram.ClientFinalMessage(
+        client_first=client_first, server_first=server_first,
+        client_key=auth_data.client_key, stored_key=auth_data.stored_key)
+
+    with pytest.raises(truenas_pyscram.ScramError,
+                       match="invalid gs2 channel-binding flag"):
+        truenas_pyscram.verify_client_final_message(
+            client_first=client_first, server_first=server_first,
+            client_final=client_final, stored_key=auth_data.stored_key)
+
+
+def test_verify_client_final_nonce_mismatch_rejected(auth_data):
+    """RFC 5802 Section 5.1: "the server MUST verify that the nonce sent by the
+    client ... is the same as the one sent by the server." A client-final bound
+    to a different server-first (different server nonce) must be rejected."""
+    client_first = truenas_pyscram.ClientFirstMessage(username="testuser")
+    server_first_a = truenas_pyscram.ServerFirstMessage(
+        client_first=client_first, salt=auth_data.salt,
+        iterations=auth_data.iterations)
+    server_first_b = truenas_pyscram.ServerFirstMessage(
+        client_first=client_first, salt=auth_data.salt,
+        iterations=auth_data.iterations)
+    client_final = truenas_pyscram.ClientFinalMessage(
+        client_first=client_first, server_first=server_first_a,
+        client_key=auth_data.client_key, stored_key=auth_data.stored_key)
+
+    # Verify against server_first_b, whose server nonce differs from A's.
+    with pytest.raises(truenas_pyscram.ScramError,
+                       match="client nonce does not match server nonce"):
+        truenas_pyscram.verify_client_final_message(
+            client_first=client_first, server_first=server_first_b,
+            client_final=client_final, stored_key=auth_data.stored_key)
