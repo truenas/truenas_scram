@@ -64,14 +64,14 @@ py_server_first_init(py_server_first_t *self, PyObject *args, PyObject *kwds)
 	}
 
 	/* Create new message from parameters */
-	if (!PyObject_IsInstance(client_first_obj,
-				 (PyObject *)&PyClientFirstMessage_Type)) {
+	if (!PyObject_TypeCheck(client_first_obj,
+				 &PyClientFirstMessage_Type)) {
 		PyErr_SetString(PyExc_TypeError,
 				"client_first must be a ClientFirstMessage instance");
 		return -1;
 	}
 
-	if (!PyObject_IsInstance(salt_obj, (PyObject *)&PyCryptoDatum_Type)) {
+	if (!PyObject_TypeCheck(salt_obj, &PyCryptoDatum_Type)) {
 		PyErr_SetString(PyExc_TypeError,
 				"salt must be a CryptoDatum instance");
 		return -1;
