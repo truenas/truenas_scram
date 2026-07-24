@@ -165,6 +165,7 @@ py_crypto_datum_richcompare(py_crypto_datum_t *self, PyObject *other, int op)
 	if (self->datum.size != other_datum->datum.size) {
 		result = 0;
 	} else if (self->datum.size == 0) {
+		/* both are zero-length */
 		result = 1;
 	} else {
 		/* Constant-time compare: these datums hold secrets. */
