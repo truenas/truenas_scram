@@ -46,7 +46,7 @@ Client                                Server
 
 #### 1. Client First Message
 ```python
-client_first = truenas_pyscram.ClientFirstMessage("username")
+client_first = truenas_pyscram.ClientFirstMessage(username="username")
 # Generates: n,,n=username,r=<client_nonce>
 ```
 
@@ -54,22 +54,25 @@ client_first = truenas_pyscram.ClientFirstMessage("username")
 ```python
 auth_data = truenas_pyscram.generate_scram_auth_data()
 server_first = truenas_pyscram.ServerFirstMessage(
-    client_first, auth_data.salt, auth_data.iterations)
+    client_first=client_first, salt=auth_data.salt,
+    iterations=auth_data.iterations)
 # Generates: r=<combined_nonce>,s=<salt_b64>,i=<iterations>
 ```
 
 #### 3. Client Final Message
 ```python
 client_final = truenas_pyscram.ClientFinalMessage(
-    client_first, server_first, auth_data.client_key, auth_data.stored_key)
+    client_first=client_first, server_first=server_first,
+    client_key=auth_data.client_key, stored_key=auth_data.stored_key)
 # Generates: c=<channel_binding_b64>,r=<nonce>,p=<client_proof_b64>
 ```
 
 #### 4. Server Final Message
 ```python
 server_final = truenas_pyscram.ServerFinalMessage(
-    client_first, server_first, client_final,
-    auth_data.stored_key, auth_data.server_key)
+    client_first=client_first, server_first=server_first,
+    client_final=client_final, stored_key=auth_data.stored_key,
+    server_key=auth_data.server_key)
 # Generates: v=<server_signature_b64>
 ```
 
@@ -79,14 +82,17 @@ server_final = truenas_pyscram.ServerFinalMessage(
 ```python
 # Server verifies client authentication
 truenas_pyscram.verify_client_final_message(
-    client_first, server_first, client_final, stored_key)
+    client_first=client_first, server_first=server_first,
+    client_final=client_final, stored_key=stored_key)
 ```
 
 #### Client-Side Verification (Optional but Recommended)
 ```python
 # Client verifies server authenticity
 truenas_pyscram.verify_server_signature(
-    client_first, server_first, client_final, server_final, server_key)
+    client_first=client_first, server_first=server_first,
+    client_final=client_final, server_final=server_final,
+    server_key=server_key)
 ```
 
 ## Complete Example
@@ -98,28 +104,33 @@ import truenas_pyscram
 auth_data = truenas_pyscram.generate_scram_auth_data()
 
 # 1. Client creates first message
-client_first = truenas_pyscram.ClientFirstMessage("alice")
+client_first = truenas_pyscram.ClientFirstMessage(username="alice")
 
 # 2. Server creates first response
 server_first = truenas_pyscram.ServerFirstMessage(
-    client_first, auth_data.salt, auth_data.iterations)
+    client_first=client_first, salt=auth_data.salt,
+    iterations=auth_data.iterations)
 
 # 3. Client creates final message (with password-derived keys)
 client_final = truenas_pyscram.ClientFinalMessage(
-    client_first, server_first, auth_data.client_key, auth_data.stored_key)
+    client_first=client_first, server_first=server_first,
+    client_key=auth_data.client_key, stored_key=auth_data.stored_key)
 
 # 4. Server verifies client and creates final response
 truenas_pyscram.verify_client_final_message(
-    client_first, server_first, client_final, auth_data.stored_key)
+    client_first=client_first, server_first=server_first,
+    client_final=client_final, stored_key=auth_data.stored_key)
 
 server_final = truenas_pyscram.ServerFinalMessage(
-    client_first, server_first, client_final,
-    auth_data.stored_key, auth_data.server_key)
+    client_first=client_first, server_first=server_first,
+    client_final=client_final, stored_key=auth_data.stored_key,
+    server_key=auth_data.server_key)
 
 # 5. Client verifies server (optional but recommended)
 truenas_pyscram.verify_server_signature(
-    client_first, server_first, client_final, server_final,
-    auth_data.server_key)
+    client_first=client_first, server_first=server_first,
+    client_final=client_final, server_final=server_final,
+    server_key=auth_data.server_key)
 
 print("Authentication successful!")
 ```
