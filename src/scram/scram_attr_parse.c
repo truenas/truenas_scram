@@ -24,7 +24,7 @@ scram_resp_t scram_parse_str_u64(const char *str_in,
 
 	// strtoull requires explicitly setting errno to zero
 	errno = 0;
-	lval = strtoull(str_in, &end, 0);
+	lval = strtoull(str_in, &end, 10);
 	if (errno != 0) {
 		scram_set_error(error, "%s: strtoull() failed: %s",
 				str_in, strerror(errno));
@@ -32,13 +32,13 @@ scram_resp_t scram_parse_str_u64(const char *str_in,
 	}
 
 	/*
-	 * If there were no digits at all then end == str_in
-	 * If all characters were digits then *end will be '\0'
-	 * Otherwise *end will be the first invalid character.
+	 * RFC 5802 numbers are decimal digits only. strtoull() with base 10
+	 * still silently consumes a leading sign or whitespace, so require the
+	 * first character to be a digit; require *end == '\0' to reject any
+	 * trailing characters after the digits.
 	 */
-	if ((end == str_in) && (*end != '\0')) {
-		scram_set_error(error, "%s: not an integer: %c",
-				str_in, *end);
+	if ((str_in[0] < '0' || str_in[0] > '9') || (*end != '\0')) {
+		scram_set_error(error, "%s: not a valid decimal integer", str_in);
 		return SCRAM_E_INVALID_REQUEST;
 	}
 
@@ -227,8 +227,9 @@ scram_resp_t scram_attr_parse(const char *str_in,
 		return SCRAM_E_PARSE_ERROR;
 	}
 
-	// advance attr value past the `=` character
-	if (*attr_val++ == '\0') {
+	// advance past the '=' to the value, then reject an empty value
+	attr_val++;
+	if (*attr_val == '\0') {
 		scram_set_error(error, "%s: expected value after separator", str_in);
 		free(attr_ident);
 		return SCRAM_E_PARSE_ERROR;
@@ -244,11 +245,21 @@ scram_resp_t scram_attr_parse(const char *str_in,
 		}
 		break;
 	case SCRAM_ATTR_SALT_CH:
-		ret = scram_parse_b64_datum(attr_val, SCRAM_DEFAULT_SALT_SZ,
+		/* RFC 5802 sets no salt length; accept any size up to the cap. */
+		ret = scram_parse_b64_datum(attr_val, 0,
 					    &attr_out->scram_val.datum,
 					    error);
 		if (ret == SCRAM_E_SUCCESS) {
-			attr_out->scram_type = ATTR_TYPE_CRYPTO_DATUM;
+			if (attr_out->scram_val.datum.size > SCRAM_MAX_SALT_SZ) {
+				scram_set_error(error,
+						"%zu: salt exceeds maximum of %zu",
+						attr_out->scram_val.datum.size,
+						SCRAM_MAX_SALT_SZ);
+				crypto_datum_clear(&attr_out->scram_val.datum, true);
+				ret = SCRAM_E_INVALID_REQUEST;
+			} else {
+				attr_out->scram_type = ATTR_TYPE_CRYPTO_DATUM;
+			}
 		}
 		break;
 	case SCRAM_ATTR_ITERATION_COUNT_CH:

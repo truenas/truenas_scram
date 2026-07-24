@@ -61,6 +61,13 @@ SCRAM_ATTR(RESERVED_MEXT, 'm')
 #define SCRAM_DEFAULT_SALT_SZ 16
 #define SCRAM_DEFAULT_PWD_SZ 64
 
+/*
+ * RFC 5802 sets no salt length. Accept any length up to this generous cap
+ * (well above any real salt) when parsing an untrusted server-first-message,
+ * rather than the decoder's 64 KiB ceiling.
+ */
+#define SCRAM_MAX_SALT_SZ ((size_t)1024)
+
 enum scram_attr_type {
 	ATTR_TYPE_NUMBER,
 	ATTR_TYPE_CRYPTO_DATUM,
