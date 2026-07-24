@@ -1,5 +1,7 @@
 """Tests for RFC string parsing functionality in SCRAM messages."""
 
+import re
+
 import pytest
 import truenas_pyscram as scram
 
@@ -454,3 +456,48 @@ def test_server_final_rfc_string_rejects_extra_param(client_server_first_message
                        match="Cannot specify both rfc_string and other parameters"):
         scram.ServerFinalMessage(rfc_string=str(server_final),
                                  server_key=auth_data.server_key)
+
+def _server_first_str(iterations=500000, salt=None):
+    """Build a server-first-message RFC string for mutation."""
+    client_first = scram.ClientFirstMessage(username="testuser")
+    if salt is None:
+        salt = scram.CryptoDatum(b"S" * 16)
+    return str(scram.ServerFirstMessage(client_first=client_first,
+                                        salt=salt, iterations=iterations))
+
+
+@pytest.mark.parametrize("bad", ["100000junk", "0x186A0", "+100000",
+                                 "100000.5", " 100000", "1e9"])
+def test_server_first_rejects_non_decimal_iterations(bad):
+    """RFC 5802 iteration-count is decimal digits only; a sign, whitespace,
+    hex form, or trailing characters must be rejected."""
+    rfc = re.sub(r"i=\d+$", "i=" + bad, _server_first_str())
+    with pytest.raises(scram.ScramError, match="not a valid decimal integer") as exc:
+        scram.ServerFirstMessage(rfc_string=rfc)
+    assert exc.value.code == scram.SCRAM_E_INVALID_REQUEST
+
+
+@pytest.mark.parametrize("attr", ["i", "s"])
+def test_server_first_rejects_empty_attribute_value(attr):
+    """An attribute present with an empty value (e.g. 'i=' or 's=') is rejected."""
+    base = _server_first_str()
+    rfc = re.sub(r"i=\d+$", "i=", base) if attr == "i" else re.sub(r"s=[^,]+", "s=", base)
+    with pytest.raises(scram.ScramError, match="expected value after separator") as exc:
+        scram.ServerFirstMessage(rfc_string=rfc)
+    assert exc.value.code == scram.SCRAM_E_PARSE_ERROR
+
+
+@pytest.mark.parametrize("salt_len", [16, 32, 64, 1024])
+def test_server_first_accepts_salt_up_to_cap(salt_len):
+    """RFC 5802 sets no salt length; sizes up to the cap round-trip."""
+    rfc = _server_first_str(salt=scram.CryptoDatum(b"S" * salt_len))
+    assert bytes(scram.ServerFirstMessage(rfc_string=rfc).salt) == b"S" * salt_len
+
+
+@pytest.mark.parametrize("salt_len", [1025, 4096])
+def test_server_first_rejects_salt_over_cap(salt_len):
+    """A salt larger than the cap is rejected."""
+    rfc = _server_first_str(salt=scram.CryptoDatum(b"S" * salt_len))
+    with pytest.raises(scram.ScramError, match="salt exceeds maximum") as exc:
+        scram.ServerFirstMessage(rfc_string=rfc)
+    assert exc.value.code == scram.SCRAM_E_INVALID_REQUEST
