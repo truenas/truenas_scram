@@ -51,8 +51,8 @@ parse_client_final_params(PyObject *args, PyObject *kwds,
 	}
 
 	/* Validate client_first parameter */
-	if (!PyObject_IsInstance(client_first_obj,
-				 (PyObject *)&PyClientFirstMessage_Type)) {
+	if (!PyObject_TypeCheck(client_first_obj,
+				 &PyClientFirstMessage_Type)) {
 		PyErr_SetString(PyExc_TypeError,
 				"client_first must be a ClientFirstMessage instance");
 		return -1;
@@ -60,8 +60,8 @@ parse_client_final_params(PyObject *args, PyObject *kwds,
 	params->client_first = (py_client_first_t *)client_first_obj;
 
 	/* Validate server_first parameter */
-	if (!PyObject_IsInstance(server_first_obj,
-				 (PyObject *)&PyServerFirstMessage_Type)) {
+	if (!PyObject_TypeCheck(server_first_obj,
+				 &PyServerFirstMessage_Type)) {
 		PyErr_SetString(PyExc_TypeError,
 				"server_first must be a ServerFirstMessage instance");
 		return -1;
@@ -69,8 +69,8 @@ parse_client_final_params(PyObject *args, PyObject *kwds,
 	params->server_first = (py_server_first_t *)server_first_obj;
 
 	/* Validate client_key parameter */
-	if (!PyObject_IsInstance(client_key_obj,
-				 (PyObject *)&PyCryptoDatum_Type)) {
+	if (!PyObject_TypeCheck(client_key_obj,
+				 &PyCryptoDatum_Type)) {
 		PyErr_SetString(PyExc_TypeError,
 				"client_key must be a CryptoDatum instance");
 		return -1;
@@ -78,8 +78,8 @@ parse_client_final_params(PyObject *args, PyObject *kwds,
 	params->client_key = (py_crypto_datum_t *)client_key_obj;
 
 	/* Validate stored_key parameter */
-	if (!PyObject_IsInstance(stored_key_obj,
-				 (PyObject *)&PyCryptoDatum_Type)) {
+	if (!PyObject_TypeCheck(stored_key_obj,
+				 &PyCryptoDatum_Type)) {
 		PyErr_SetString(PyExc_TypeError,
 				"stored_key must be a CryptoDatum instance");
 		return -1;
@@ -88,8 +88,8 @@ parse_client_final_params(PyObject *args, PyObject *kwds,
 
 	/* Validate optional channel_binding parameter */
 	if (channel_binding_obj && channel_binding_obj != Py_None) {
-		if (!PyObject_IsInstance(channel_binding_obj,
-					 (PyObject *)&PyCryptoDatum_Type)) {
+		if (!PyObject_TypeCheck(channel_binding_obj,
+					 &PyCryptoDatum_Type)) {
 			PyErr_SetString(PyExc_TypeError,
 					"channel_binding must be a CryptoDatum instance or None");
 			return -1;
