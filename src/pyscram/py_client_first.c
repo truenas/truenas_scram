@@ -49,6 +49,12 @@ py_client_first_init(py_client_first_t *self, PyObject *args, PyObject *kwds)
 		return -1;
 	}
 
+	if (rfc_string && api_key_id) {
+		PyErr_SetString(PyExc_ValueError,
+				"Cannot specify both rfc_string and api_key_id parameters");
+		return -1;
+	}
+
 	if (channel_binding_type && gs2_header) {
 		PyErr_SetString(PyExc_ValueError,
 				"Cannot specify both gs2_header and channel_binding_type parameters");
