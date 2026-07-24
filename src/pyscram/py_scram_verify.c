@@ -42,8 +42,8 @@ parse_client_final_verify_params(PyObject *args, PyObject *kwds,
 	}
 
 	/* Validate client_first parameter */
-	if (!PyObject_IsInstance(client_first_obj,
-				 (PyObject *)&PyClientFirstMessage_Type)) {
+	if (!PyObject_TypeCheck(client_first_obj,
+				 &PyClientFirstMessage_Type)) {
 		PyErr_SetString(PyExc_TypeError,
 				"client_first must be a ClientFirstMessage instance");
 		return -1;
@@ -51,8 +51,8 @@ parse_client_final_verify_params(PyObject *args, PyObject *kwds,
 	params->client_first = (py_client_first_t *)client_first_obj;
 
 	/* Validate server_first parameter */
-	if (!PyObject_IsInstance(server_first_obj,
-				 (PyObject *)&PyServerFirstMessage_Type)) {
+	if (!PyObject_TypeCheck(server_first_obj,
+				 &PyServerFirstMessage_Type)) {
 		PyErr_SetString(PyExc_TypeError,
 				"server_first must be a ServerFirstMessage instance");
 		return -1;
@@ -60,8 +60,8 @@ parse_client_final_verify_params(PyObject *args, PyObject *kwds,
 	params->server_first = (py_server_first_t *)server_first_obj;
 
 	/* Validate client_final parameter */
-	if (!PyObject_IsInstance(client_final_obj,
-				 (PyObject *)&PyClientFinalMessage_Type)) {
+	if (!PyObject_TypeCheck(client_final_obj,
+				 &PyClientFinalMessage_Type)) {
 		PyErr_SetString(PyExc_TypeError,
 				"client_final must be a ClientFinalMessage instance");
 		return -1;
@@ -69,8 +69,8 @@ parse_client_final_verify_params(PyObject *args, PyObject *kwds,
 	params->client_final = (py_client_final_t *)client_final_obj;
 
 	/* Validate stored_key parameter */
-	if (!PyObject_IsInstance(stored_key_obj,
-				 (PyObject *)&PyCryptoDatum_Type)) {
+	if (!PyObject_TypeCheck(stored_key_obj,
+				 &PyCryptoDatum_Type)) {
 		PyErr_SetString(PyExc_TypeError,
 				"stored_key must be a CryptoDatum instance");
 		return -1;
@@ -105,8 +105,8 @@ parse_client_final_verify_params(PyObject *args, PyObject *kwds,
 	/* Optional channel binding: a CryptoDatum (SCRAM-PLUS) or None */
 	params->channel_binding = NULL;
 	if (channel_binding_obj && channel_binding_obj != Py_None) {
-		if (!PyObject_IsInstance(channel_binding_obj,
-					 (PyObject *)&PyCryptoDatum_Type)) {
+		if (!PyObject_TypeCheck(channel_binding_obj,
+					 &PyCryptoDatum_Type)) {
 			PyErr_SetString(PyExc_TypeError,
 					"channel_binding must be a CryptoDatum or None");
 			return -1;
@@ -138,8 +138,8 @@ parse_server_signature_verify_params(PyObject *args, PyObject *kwds,
 	}
 
 	/* Validate client_first parameter */
-	if (!PyObject_IsInstance(client_first_obj,
-				 (PyObject *)&PyClientFirstMessage_Type)) {
+	if (!PyObject_TypeCheck(client_first_obj,
+				 &PyClientFirstMessage_Type)) {
 		PyErr_SetString(PyExc_TypeError,
 				"client_first must be a ClientFirstMessage instance");
 		return -1;
@@ -147,8 +147,8 @@ parse_server_signature_verify_params(PyObject *args, PyObject *kwds,
 	params->client_first = (py_client_first_t *)client_first_obj;
 
 	/* Validate server_first parameter */
-	if (!PyObject_IsInstance(server_first_obj,
-				 (PyObject *)&PyServerFirstMessage_Type)) {
+	if (!PyObject_TypeCheck(server_first_obj,
+				 &PyServerFirstMessage_Type)) {
 		PyErr_SetString(PyExc_TypeError,
 				"server_first must be a ServerFirstMessage instance");
 		return -1;
@@ -156,8 +156,8 @@ parse_server_signature_verify_params(PyObject *args, PyObject *kwds,
 	params->server_first = (py_server_first_t *)server_first_obj;
 
 	/* Validate client_final parameter */
-	if (!PyObject_IsInstance(client_final_obj,
-				 (PyObject *)&PyClientFinalMessage_Type)) {
+	if (!PyObject_TypeCheck(client_final_obj,
+				 &PyClientFinalMessage_Type)) {
 		PyErr_SetString(PyExc_TypeError,
 				"client_final must be a ClientFinalMessage instance");
 		return -1;
@@ -165,8 +165,8 @@ parse_server_signature_verify_params(PyObject *args, PyObject *kwds,
 	params->client_final = (py_client_final_t *)client_final_obj;
 
 	/* Validate server_final parameter */
-	if (!PyObject_IsInstance(server_final_obj,
-				 (PyObject *)&PyServerFinalMessage_Type)) {
+	if (!PyObject_TypeCheck(server_final_obj,
+				 &PyServerFinalMessage_Type)) {
 		PyErr_SetString(PyExc_TypeError,
 				"server_final must be a ServerFinalMessage instance");
 		return -1;
@@ -174,8 +174,8 @@ parse_server_signature_verify_params(PyObject *args, PyObject *kwds,
 	params->server_final = (py_server_final_t *)server_final_obj;
 
 	/* Validate server_key parameter */
-	if (!PyObject_IsInstance(server_key_obj,
-				 (PyObject *)&PyCryptoDatum_Type)) {
+	if (!PyObject_TypeCheck(server_key_obj,
+				 &PyCryptoDatum_Type)) {
 		PyErr_SetString(PyExc_TypeError,
 				"server_key must be a CryptoDatum instance");
 		return -1;
