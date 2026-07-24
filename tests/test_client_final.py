@@ -431,3 +431,17 @@ def test_client_final_n_flag_rejects_binding(client_first, server_first, auth_da
             client_key=auth_data.client_key,
             stored_key=auth_data.stored_key,
             channel_binding=truenas_pyscram.CryptoDatum(b"x" * 32))
+
+
+@pytest.mark.parametrize("omit", ["client_first", "server_first",
+                                  "client_key", "stored_key"])
+def test_client_final_requires_all_creation_args(client_first, server_first,
+                                                 auth_data, omit):
+    """Without rfc_string, client_first, server_first, client_key and
+    stored_key are all required; omitting any one raises ValueError."""
+    kwargs = dict(client_first=client_first, server_first=server_first,
+                  client_key=auth_data.client_key,
+                  stored_key=auth_data.stored_key)
+    del kwargs[omit]
+    with pytest.raises(ValueError, match="Must specify either rfc_string"):
+        truenas_pyscram.ClientFinalMessage(**kwargs)
