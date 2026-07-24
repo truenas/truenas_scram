@@ -488,10 +488,16 @@ scram_resp_t scram_create_server_first_message(const scram_client_first_t *clien
  * as defined in RFC 5802 Section 3. It generates the server signature by
  * reconstructing the AuthMessage and calculating ServerSignature = HMAC(ServerKey, AuthMessage).
  *
+ * This function does NOT verify the client's proof; the caller must do that
+ * separately with scram_verify_client_final_message() before trusting the
+ * client-final-message passed here.
+ *
  * @param[in] cfirst - client first message structure
  * @param[in] sfirst - server first message structure
  * @param[in] cfinal - client final message structure
- * @param[in] stored_key - stored key for verification
+ * @param[in] stored_key - the user's StoredKey; validated but not used by this
+ *            function (the signature needs only server_key), kept for symmetry
+ *            with the verification API
  * @param[in] server_key - server key for generating server signature
  * @param[out] msg_out - allocated server final message structure
  * @param[in,out] error - error buffer for detailed error information
