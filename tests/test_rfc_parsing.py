@@ -401,17 +401,7 @@ def _incomplete_messages():
 )
 def test_parse_rejects_missing_required_attributes(msg_type, rfc_string, description):
     """A message whose attributes all parse but whose required set is incomplete
-    must be rejected.
-
-    Regression test: the deserializers used to reach the completeness check with
-    `ret` still holding the SCRAM_E_SUCCESS left by the last parsed attribute and
-    jump to cleanup without reassigning it, so they returned SCRAM_E_SUCCESS while
-    leaving *msg_out unwritten. A C caller following the documented
-    `if (ret == SCRAM_E_SUCCESS)` contract then dereferenced an uninitialised
-    pointer. Assert on the specific error so the accidental downstream failure
-    the Python layer used to produce ("invalid input parameters", raised only
-    because the NULL message reached the serializer) cannot pass for a fix.
-    """
+    must be rejected."""
     with pytest.raises(scram.ScramError) as exc_info:
         msg_type(rfc_string=rfc_string)
 
