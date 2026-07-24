@@ -12,6 +12,17 @@ py_crypto_datum_init(py_crypto_datum_t *self, PyObject *args, PyObject *kwds)
 	scram_error_t error = {0};
 	scram_resp_t ret;
 
+	/*
+	 * A CryptoDatum wraps a single secret value and is immutable once
+	 * initialized; re-initialization is rejected.
+	 */
+	if (SCRAM_DATUM_IS_VALID(&self->datum)) {
+		PyErr_SetString(PyExc_RuntimeError,
+				"CryptoDatum is immutable and cannot be "
+				"re-initialized");
+		return -1;
+	}
+
 	if (!PyArg_ParseTuple(args, "y#", &data, &data_len)) {
 		return -1;
 	}
@@ -35,7 +46,18 @@ py_crypto_datum_init(py_crypto_datum_t *self, PyObject *args, PyObject *kwds)
 static void
 py_crypto_datum_dealloc(py_crypto_datum_t *self)
 {
-	crypto_datum_clear(&self->datum, true);
+	/*
+	 * Free on the data pointer directly rather than via crypto_datum_clear():
+	 * clear() zeroes the buffer and sets size to 0 while keeping it allocated,
+	 * and crypto_datum_clear() skips the free() when size is 0.
+	 */
+	if (self->datum.data) {
+		if (self->datum.size > 0) {
+			explicit_bzero(self->datum.data, self->datum.size);
+		}
+		free(self->datum.data);
+	}
+	explicit_bzero(&self->datum, sizeof(self->datum));
 	Py_TYPE(self)->tp_free((PyObject *)self);
 }
 
@@ -155,22 +177,20 @@ py_crypto_datum_richcompare(py_crypto_datum_t *self, PyObject *other, int op)
 PyDoc_STRVAR(py_crypto_datum_clear__doc__,
 "clear() -> None\n"
 "-------------\n\n"
-"Clear and securely zero the cryptographic data.\n\n"
-"This method securely overwrites the underlying data with zeros\n"
-"and frees the allocated memory. After calling this method,\n"
-"the CryptoDatum object becomes empty and should not be used\n"
-"for cryptographic operations.\n\n"
-"The operation releases the Global Interpreter Lock (GIL)\n"
-"for better performance in multithreaded environments.\n"
+"Securely zero the cryptographic data in place.\n\n"
+"Overwrites the underlying buffer with zeros using explicit_bzero()\n"
+"and resets the length to zero. The buffer itself is released when the\n"
+"object is destroyed. After clear() the datum is empty and must not be\n"
+"used for cryptographic operations.\n"
 );
 
 static PyObject *
 py_crypto_datum_clear(py_crypto_datum_t *self, PyObject *Py_UNUSED(ignored))
 {
-	Py_BEGIN_ALLOW_THREADS
-	crypto_datum_clear(&self->datum, true);
-	Py_END_ALLOW_THREADS
-
+	if (self->datum.data && self->datum.size > 0) {
+		explicit_bzero(self->datum.data, self->datum.size);
+		self->datum.size = 0;
+	}
 	Py_RETURN_NONE;
 }
 
