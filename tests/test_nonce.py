@@ -1,5 +1,6 @@
 """Test nonce generation functionality."""
 
+import pytest
 import truenas_pyscram
 
 
@@ -89,3 +90,23 @@ def test_crypto_datum_clear():
     assert len(empty_datum) == 0
     # Both should be empty and equal
     assert len(nonce) == len(empty_datum)
+
+
+def test_crypto_datum_is_immutable():
+    """A CryptoDatum holding data cannot be re-initialized; the original
+    value is left intact."""
+    datum = truenas_pyscram.CryptoDatum(b"secret-key-material")
+    with pytest.raises(RuntimeError, match="immutable"):
+        datum.__init__(b"replacement")
+    assert bytes(datum) == b"secret-key-material"
+
+
+def test_memoryview_reads_zeros_after_clear():
+    """A memoryview taken before clear() stays valid and reads zeros:
+    clear() zeroizes the buffer in place and keeps it allocated until the
+    object is destroyed."""
+    datum = truenas_pyscram.CryptoDatum(b"A" * 32)
+    view = memoryview(datum)
+    assert bytes(view) == b"A" * 32
+    datum.clear()
+    assert bytes(view) == b"\x00" * 32
