@@ -52,8 +52,8 @@ parse_server_final_params(PyObject *args, PyObject *kwds,
 	}
 
 	/* Validate client_first parameter */
-	if (!PyObject_IsInstance(client_first_obj,
-				 (PyObject *)&PyClientFirstMessage_Type)) {
+	if (!PyObject_TypeCheck(client_first_obj,
+				 &PyClientFirstMessage_Type)) {
 		PyErr_SetString(PyExc_TypeError,
 				"client_first must be a ClientFirstMessage instance");
 		return -1;
@@ -61,8 +61,8 @@ parse_server_final_params(PyObject *args, PyObject *kwds,
 	params->client_first = (py_client_first_t *)client_first_obj;
 
 	/* Validate server_first parameter */
-	if (!PyObject_IsInstance(server_first_obj,
-				 (PyObject *)&PyServerFirstMessage_Type)) {
+	if (!PyObject_TypeCheck(server_first_obj,
+				 &PyServerFirstMessage_Type)) {
 		PyErr_SetString(PyExc_TypeError,
 				"server_first must be a ServerFirstMessage instance");
 		return -1;
@@ -70,8 +70,8 @@ parse_server_final_params(PyObject *args, PyObject *kwds,
 	params->server_first = (py_server_first_t *)server_first_obj;
 
 	/* Validate client_final parameter */
-	if (!PyObject_IsInstance(client_final_obj,
-				 (PyObject *)&PyClientFinalMessage_Type)) {
+	if (!PyObject_TypeCheck(client_final_obj,
+				 &PyClientFinalMessage_Type)) {
 		PyErr_SetString(PyExc_TypeError,
 				"client_final must be a ClientFinalMessage instance");
 		return -1;
@@ -79,8 +79,8 @@ parse_server_final_params(PyObject *args, PyObject *kwds,
 	params->client_final = (py_client_final_t *)client_final_obj;
 
 	/* Validate stored_key parameter */
-	if (!PyObject_IsInstance(stored_key_obj,
-				 (PyObject *)&PyCryptoDatum_Type)) {
+	if (!PyObject_TypeCheck(stored_key_obj,
+				 &PyCryptoDatum_Type)) {
 		PyErr_SetString(PyExc_TypeError,
 				"stored_key must be a CryptoDatum instance");
 		return -1;
@@ -88,8 +88,8 @@ parse_server_final_params(PyObject *args, PyObject *kwds,
 	params->stored_key = (py_crypto_datum_t *)stored_key_obj;
 
 	/* Validate server_key parameter */
-	if (!PyObject_IsInstance(server_key_obj,
-				 (PyObject *)&PyCryptoDatum_Type)) {
+	if (!PyObject_TypeCheck(server_key_obj,
+				 &PyCryptoDatum_Type)) {
 		PyErr_SetString(PyExc_TypeError,
 				"server_key must be a CryptoDatum instance");
 		return -1;
