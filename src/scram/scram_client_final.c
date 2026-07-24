@@ -359,6 +359,7 @@ scram_resp_t scram_deserialize_client_final_message(const char *scram_msg_str,
 
 	if (!msg->client_proof.size || !msg->nonce.size) {
 		scram_set_error(error, "missing required attributes");
+		ret = SCRAM_E_PARSE_ERROR;
 		goto cleanup;
 	}
 
