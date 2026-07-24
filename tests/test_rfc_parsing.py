@@ -408,3 +408,49 @@ def test_parse_rejects_missing_required_attributes(msg_type, rfc_string, descrip
     exc = exc_info.value
     assert "missing required attributes" in str(exc)
     assert exc.code == scram.SCRAM_E_PARSE_ERROR
+
+
+def test_client_first_rfc_string_api_key_id_exclusive():
+    """rfc_string and api_key_id are mutually exclusive (api_key_id would
+    otherwise be silently ignored)."""
+    cf = scram.ClientFirstMessage(username="testuser")
+    with pytest.raises(ValueError,
+                       match="Cannot specify both rfc_string and api_key_id"):
+        scram.ClientFirstMessage(rfc_string=str(cf), api_key_id=99)
+
+
+@pytest.mark.parametrize("extra", ["server_first", "client_key",
+                                   "stored_key", "channel_binding"])
+def test_client_final_rfc_string_rejects_any_extra_param(
+        client_server_first_messages, extra):
+    """rfc_string cannot be combined with any message parameter, not just the
+    first one checked."""
+    client_first, server_first, auth_data = client_server_first_messages
+    final = scram.ClientFinalMessage(
+        client_first=client_first, server_first=server_first,
+        client_key=auth_data.client_key, stored_key=auth_data.stored_key)
+    values = {
+        "server_first": server_first,
+        "client_key": auth_data.client_key,
+        "stored_key": auth_data.stored_key,
+        "channel_binding": scram.CryptoDatum(b"x" * 32),
+    }
+    with pytest.raises(ValueError,
+                       match="Cannot specify both rfc_string and other parameters"):
+        scram.ClientFinalMessage(rfc_string=str(final), **{extra: values[extra]})
+
+
+def test_server_final_rfc_string_rejects_extra_param(client_server_first_messages):
+    """rfc_string cannot be combined with a non-first message parameter."""
+    client_first, server_first, auth_data = client_server_first_messages
+    client_final = scram.ClientFinalMessage(
+        client_first=client_first, server_first=server_first,
+        client_key=auth_data.client_key, stored_key=auth_data.stored_key)
+    server_final = scram.ServerFinalMessage(
+        client_first=client_first, server_first=server_first,
+        client_final=client_final, stored_key=auth_data.stored_key,
+        server_key=auth_data.server_key)
+    with pytest.raises(ValueError,
+                       match="Cannot specify both rfc_string and other parameters"):
+        scram.ServerFinalMessage(rfc_string=str(server_final),
+                                 server_key=auth_data.server_key)
