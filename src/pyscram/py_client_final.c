@@ -31,7 +31,8 @@ parse_client_final_params(PyObject *args, PyObject *kwds,
 	}
 
 	/* Check for mutually exclusive parameters */
-	if (*rfc_string && client_first_obj) {
+	if (*rfc_string && (client_first_obj || server_first_obj || client_key_obj ||
+			    stored_key_obj || channel_binding_obj)) {
 		PyErr_SetString(PyExc_ValueError,
 				"Cannot specify both rfc_string and other parameters");
 		return -1;
