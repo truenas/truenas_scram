@@ -221,6 +221,7 @@ scram_resp_t scram_deserialize_server_first_message(const char *scram_msg_str,
 
 	if ((msg->nonce.size == 0) || (msg->salt.size == 0) || (msg->iterations == 0)) {
 		scram_set_error(error, "missing required attributes");
+		ret = SCRAM_E_PARSE_ERROR;
 		goto cleanup;
 	}
 
