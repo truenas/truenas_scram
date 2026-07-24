@@ -110,3 +110,15 @@ def test_memoryview_reads_zeros_after_clear():
     assert bytes(view) == b"A" * 32
     datum.clear()
     assert bytes(view) == b"\x00" * 32
+
+
+def test_crypto_datum_equality_is_cryptodatum_only():
+    """CryptoDatum compares equal only to another CryptoDatum with the same
+    contents, not to a plain bytes value of the same bytes."""
+    a = truenas_pyscram.CryptoDatum(b"same-secret-value")
+    b = truenas_pyscram.CryptoDatum(b"same-secret-value")
+    c = truenas_pyscram.CryptoDatum(b"another-secret!!!")
+    assert a == b
+    assert a != c
+    assert not (a == b"same-secret-value")
+    assert a != b"same-secret-value"

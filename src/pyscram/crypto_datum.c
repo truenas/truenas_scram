@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 #define PY_SSIZE_T_CLEAN
 #include <Python.h>
+#include <openssl/crypto.h>
 #include "truenas_pyscram.h"
 
 static int
@@ -150,7 +151,8 @@ py_crypto_datum_richcompare(py_crypto_datum_t *self, PyObject *other, int op)
 		Py_RETURN_NOTIMPLEMENTED;
 	}
 
-	if (!PyObject_IsInstance(other, (PyObject *)&PyCryptoDatum_Type)) {
+	/* Only CryptoDatum instances compare equal; anything else is unequal. */
+	if (!PyObject_TypeCheck(other, &PyCryptoDatum_Type)) {
 		if (op == Py_EQ) {
 			Py_RETURN_FALSE;
 		} else {
@@ -162,8 +164,14 @@ py_crypto_datum_richcompare(py_crypto_datum_t *self, PyObject *other, int op)
 
 	if (self->datum.size != other_datum->datum.size) {
 		result = 0;
+	} else if (self->datum.size == 0) {
+		/* both are zero-length */
+		result = 1;
 	} else {
-		result = (memcmp(self->datum.data, other_datum->datum.data, self->datum.size) == 0);
+		/* Constant-time compare: these datums hold secrets. */
+		result = (CRYPTO_memcmp(self->datum.data,
+					other_datum->datum.data,
+					self->datum.size) == 0);
 	}
 
 	if (op == Py_EQ) {
@@ -208,9 +216,10 @@ static PyMethodDef py_crypto_datum_methods[] = {
 PyDoc_STRVAR(py_crypto_datum__doc__,
 "CryptoDatum(data)\n"
 "-----------------\n\n"
-"Wrapper around crypto_datum_t, subclassing bytes.\n"
-"Provides access to the underlying crypto_datum_t structure\n"
-"while maintaining all bytes functionality.\n\n"
+"Immutable wrapper around a crypto_datum_t holding secret bytes.\n"
+"Supports len(), indexing and slicing, the buffer protocol (e.g.\n"
+"bytes(d)), hashing, and equality against other CryptoDatum instances\n"
+"(constant-time). Call clear() to zero the contents when done.\n\n"
 "Parameters\n"
 "----------\n"
 "data : bytes-like\n"
