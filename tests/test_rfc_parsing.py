@@ -362,3 +362,49 @@ def test_parse_rejects_equals_in_username():
     bad_rfc = "n,,n=user=name,r=" + "A" * 43
     with pytest.raises(scram.ScramError, match="username must not contain"):
         scram.ClientFirstMessage(rfc_string=bad_rfc)
+
+
+def _truncated(rfc_string, keep):
+    """Drop all but the first `keep` comma-separated attributes of a message."""
+    return ",".join(rfc_string.split(",")[:keep])
+
+
+def _incomplete_messages():
+    """Well-formed-but-incomplete messages: every attribute present parses, but
+    the required set is not satisfied."""
+    client_first = scram.ClientFirstMessage(username="testuser")
+    auth_data = scram.generate_scram_auth_data()
+    server_first = scram.ServerFirstMessage(
+        client_first=client_first,
+        salt=auth_data.salt,
+        iterations=auth_data.iterations
+    )
+    client_final = scram.ClientFinalMessage(
+        client_first=client_first, server_first=server_first,
+        client_key=auth_data.client_key, stored_key=auth_data.stored_key
+    )
+
+    # client-first carries a "n,,"-prefixed gs2 header, so its attributes start
+    # at index 1 of the comma split.
+    return [
+        (scram.ClientFirstMessage, _truncated(str(client_first), 3), "no nonce"),
+        (scram.ServerFirstMessage, _truncated(str(server_first), 1), "nonce only"),
+        (scram.ServerFirstMessage, _truncated(str(server_first), 2), "no iterations"),
+        (scram.ClientFinalMessage, _truncated(str(client_final), 2), "no proof"),
+    ]
+
+
+@pytest.mark.parametrize(
+    "msg_type,rfc_string,description",
+    _incomplete_messages(),
+    ids=lambda v: v if isinstance(v, str) and " " in v else None
+)
+def test_parse_rejects_missing_required_attributes(msg_type, rfc_string, description):
+    """A message whose attributes all parse but whose required set is incomplete
+    must be rejected."""
+    with pytest.raises(scram.ScramError) as exc_info:
+        msg_type(rfc_string=rfc_string)
+
+    exc = exc_info.value
+    assert "missing required attributes" in str(exc)
+    assert exc.code == scram.SCRAM_E_PARSE_ERROR
