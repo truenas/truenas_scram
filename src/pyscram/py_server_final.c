@@ -37,9 +37,12 @@ parse_server_final_params(PyObject *args, PyObject *kwds,
 		return -1;
 	}
 
-	if (!*rfc_string && !client_first_obj) {
+	if (!*rfc_string && (!client_first_obj || !server_first_obj ||
+			     !client_final_obj || !stored_key_obj ||
+			     !server_key_obj)) {
 		PyErr_SetString(PyExc_ValueError,
-				"Must specify either rfc_string or message parameters");
+				"Must specify either rfc_string or all of client_first, "
+				"server_first, client_final, stored_key and server_key");
 		return -1;
 	}
 

@@ -375,3 +375,17 @@ def test_server_final_message_parametrized_clients(auth_data, username,
     msg_str = str(msg)
     assert msg_str.startswith('v=')
     assert len(msg_str) > 3  # More than just "v="
+
+
+@pytest.mark.parametrize("omit", ["client_first", "server_first",
+                                  "client_final", "stored_key", "server_key"])
+def test_server_final_requires_all_creation_args(client_first, server_first,
+                                                 client_final, auth_data, omit):
+    """Without rfc_string, all five creation arguments are required;
+    omitting any one raises ValueError."""
+    kwargs = dict(client_first=client_first, server_first=server_first,
+                  client_final=client_final, stored_key=auth_data.stored_key,
+                  server_key=auth_data.server_key)
+    del kwargs[omit]
+    with pytest.raises(ValueError, match="Must specify either rfc_string"):
+        truenas_pyscram.ServerFinalMessage(**kwargs)

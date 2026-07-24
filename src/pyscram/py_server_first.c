@@ -30,9 +30,10 @@ py_server_first_init(py_server_first_t *self, PyObject *args, PyObject *kwds)
 		return -1;
 	}
 
-	if (!rfc_string && !client_first_obj) {
+	if (!rfc_string && (!client_first_obj || !salt_obj)) {
 		PyErr_SetString(PyExc_ValueError,
-				"Must specify either rfc_string or client_first parameter");
+				"Must specify either rfc_string or both client_first "
+				"and salt");
 		return -1;
 	}
 
