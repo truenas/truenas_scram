@@ -38,7 +38,26 @@ https://github.com/truenas/truenas_scram/releases/download/<train>-nightly/<file
 
 Every publish replaces *all* assets of the release, so consumers must fetch
 `manifest.json` to learn the current file names rather than hard-coding them,
-and verify the downloads against `SHA256SUMS`.
+and verify the downloads against `SHA256SUMS`:
+
+```bash
+train=master   # or 26
+url="https://github.com/truenas/truenas_scram/releases/download/${train}-nightly"
+
+curl --fail -LSs -O "$url/manifest.json"
+curl --fail -LSs -O "$url/SHA256SUMS"
+for deb in $(jq -r '.debs[]' manifest.json); do
+    curl --fail -LSs -O "$url/$deb"
+done
+sha256sum -c --ignore-missing SHA256SUMS
+
+apt-get install -y ./libtruenas-scram1_*.deb ./python3-truenas-scram_*.deb
+```
+
+`manifest.json` also records the branch, commit, build date, build run URL and
+the deb version, which is the changelog version suffixed with
+`+truenas.<date>.<run number>` so consecutive rolling builds stay upgradeable.
+Debug-symbol packages are not published.
 
 ## SCRAM Authentication Flow
 
