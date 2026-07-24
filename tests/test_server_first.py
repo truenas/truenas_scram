@@ -284,3 +284,18 @@ def test_server_first_message_with_different_clients(auth_data, username,
     client_nonce_bytes = bytes(client.nonce)
     combined_nonce_bytes = bytes(msg.nonce)
     assert combined_nonce_bytes.startswith(client_nonce_bytes)
+
+
+def test_server_first_requires_salt(client_first):
+    """salt is required unless rfc_string is given; omitting it raises
+    ValueError."""
+    with pytest.raises(ValueError, match="Must specify either rfc_string"):
+        truenas_pyscram.ServerFirstMessage(client_first=client_first)
+
+
+def test_server_first_rejects_none_salt(client_first):
+    """A salt of None is rejected by the type check, distinct from an
+    omitted argument."""
+    with pytest.raises(TypeError, match="salt must be a CryptoDatum"):
+        truenas_pyscram.ServerFirstMessage(client_first=client_first,
+                                           salt=None, iterations=500000)
