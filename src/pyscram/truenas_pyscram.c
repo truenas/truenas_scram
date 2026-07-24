@@ -146,7 +146,7 @@ py_generate_scram_auth_data(PyObject *self, PyObject *args, PyObject *kwds)
 
 	/* Validate and extract salted_password if provided */
 	if (salted_password_obj && salted_password_obj != Py_None) {
-		if (!PyObject_IsInstance(salted_password_obj, (PyObject *)&PyCryptoDatum_Type)) {
+		if (!PyObject_TypeCheck(salted_password_obj, &PyCryptoDatum_Type)) {
 			PyErr_SetString(PyExc_TypeError, "salted_password must be a CryptoDatum");
 			return NULL;
 		}
@@ -155,7 +155,7 @@ py_generate_scram_auth_data(PyObject *self, PyObject *args, PyObject *kwds)
 
 	/* Validate and extract salt if provided */
 	if (salt_obj && salt_obj != Py_None) {
-		if (!PyObject_IsInstance(salt_obj, (PyObject *)&PyCryptoDatum_Type)) {
+		if (!PyObject_TypeCheck(salt_obj, &PyCryptoDatum_Type)) {
 			PyErr_SetString(PyExc_TypeError, "salt must be a CryptoDatum");
 			return NULL;
 		}
