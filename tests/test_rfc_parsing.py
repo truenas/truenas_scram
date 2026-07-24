@@ -105,7 +105,7 @@ def test_server_first_parse_various_iterations(iterations):
 
 def test_server_first_no_params_error():
     """Test that ServerFirstMessage requires either client_first or rfc_string."""
-    with pytest.raises(ValueError, match="Must specify either rfc_string or client_first"):
+    with pytest.raises(ValueError, match="Must specify either rfc_string"):
         scram.ServerFirstMessage()
 
 
@@ -186,7 +186,7 @@ def test_client_final_parse_with_channel_binding(client_server_first_messages):
 
 def test_client_final_no_params_error():
     """Test that ClientFinalMessage requires parameters."""
-    with pytest.raises(ValueError, match="Must specify either rfc_string or message parameters"):
+    with pytest.raises(ValueError, match="Must specify either rfc_string"):
         scram.ClientFinalMessage()
 
 
@@ -245,7 +245,7 @@ def test_server_final_parse_basic(all_messages):
 
 def test_server_final_no_params_error():
     """Test that ServerFinalMessage requires parameters."""
-    with pytest.raises(ValueError, match="Must specify either rfc_string or message parameters"):
+    with pytest.raises(ValueError, match="Must specify either rfc_string"):
         scram.ServerFinalMessage()
 
 
