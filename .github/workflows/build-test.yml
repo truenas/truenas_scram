@@ -26,6 +26,12 @@ jobs:
   test-build:
     runs-on: ubuntu-latest
     container: debian:trixie
+    # debian:trixie's default shell for container run steps is dash, which
+    # rejects the ${GITHUB_SHA::12} substring below as a bad substitution.
+    # Pin bash for the whole job, mirroring truenas_pylibzfs.
+    defaults:
+      run:
+        shell: bash
 
     steps:
     - name: Checkout code
