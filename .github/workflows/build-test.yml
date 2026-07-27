@@ -1,15 +1,37 @@
 name: Build and Test
 
+# Build the truenas-scram debs, validate them (install + pytest +
+# stubtest), and - on pushes to a mapped branch - republish them as a
+# rolling <train>-nightly GitHub release on this repo.
+#
+# The rolling releases exist so the repos consuming this one (pam_truenas,
+# middleware, truenas_api_client, ...) can install prebuilt debs instead of
+# rebuilding this project inside their own runners.  Assets never expire
+# and are downloadable anonymously at stable URLs:
+#   https://github.com/truenas/truenas_scram/releases/download/master-nightly/<file>
+# Consumers fetch manifest.json first (every publish replaces all assets,
+# so file names must never be hard-coded) and verify against SHA256SUMS.
+#
+# publish depends on test-build and reuses its artifact, so a deb is only
+# ever published if that exact build installed and passed the test suite,
+# and a merge costs a single container build rather than one per workflow.
+
 on:
   pull_request:
-    branches: [ master ]
+    branches: [ master, stable/26 ]
   push:
-    branches: [ master ]
+    branches: [ master, stable/26 ]
 
 jobs:
   test-build:
     runs-on: ubuntu-latest
     container: debian:trixie
+    # debian:trixie's default shell for container run steps is dash, which
+    # rejects the ${GITHUB_SHA::12} substring below as a bad substitution.
+    # Pin bash for the whole job, mirroring truenas_pylibzfs.
+    defaults:
+      run:
+        shell: bash
 
     steps:
     - name: Checkout code
@@ -20,7 +42,34 @@ jobs:
         apt update
         apt install -y libssl-dev libbsd-dev python3-dev build-essential devscripts debhelper
         apt install -y debhelper dh-python pybuild-plugin-pyproject python3-pytest python3-all-dev
-        apt install -y python3-pip python3-setuptools python3-build libidn-dev python3-mypy
+        apt install -y python3-pip python3-setuptools python3-build libidn-dev python3-mypy jq
+
+    - name: Map branch to TrueNAS train
+      run: |
+        # PRs build against their base branch's train; pushes use the
+        # pushed branch.  train-for-ref.sh is the single source of truth.
+        if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+          ref="$GITHUB_BASE_REF"
+        else
+          ref="$GITHUB_REF_NAME"
+        fi
+        train="$(.github/workflows/scripts/train-for-ref.sh "$ref")"
+        echo "TRAIN=$train" >> "$GITHUB_ENV"
+        echo "Building for the $train train"
+
+    - name: Stamp rolling version
+      env:
+        DEBEMAIL: dev@truenas.com
+        DEBFULLNAME: TrueNAS Engineering
+      run: |
+        # Version the rolling deb above the changelog release it is based
+        # on so consecutive builds stay upgradeable, mirroring how
+        # truenas/zfs versions its own rolling debs.  Stamped on every
+        # event so PRs exercise the same build the publish path uses.
+        dch -b -M \
+          -v "$(dpkg-parsechangelog -S Version)+truenas.$(date -u +%Y%m%d).$GITHUB_RUN_NUMBER" \
+          --force-distribution --distribution "${TRAIN}-nightly" \
+          "Rolling build of $GITHUB_REF_NAME at ${GITHUB_SHA::12}"
 
     - name: Test Debian package build
       run: |
@@ -44,3 +93,111 @@ jobs:
         #   the C code enforces keyword-only arguments internally).
         python3 -m mypy.stubtest truenas_pyscram \
           --allowlist tests/.stubtest_allowlist.txt
+
+    - name: Assemble artifacts
+      run: |
+        # The *_*.deb globs pick up the three shipping packages only; the
+        # automatic *-dbgsym_* debs are deliberately not published.
+        mkdir artifacts
+        mv ../libtruenas-scram1_*.deb \
+           ../libtruenas-scram-dev_*.deb \
+           ../python3-truenas-scram_*.deb \
+           artifacts
+        jq -n \
+          --arg train "$TRAIN" \
+          --arg scram_version "$(dpkg-parsechangelog -S Version)" \
+          '{train: $train, scram_version: $scram_version}' \
+          > artifacts/buildinfo.json
+        cat artifacts/buildinfo.json
+
+    - uses: actions/upload-artifact@v4
+      with:
+        name: truenas-scram-debs
+        path: artifacts
+
+  # On every push to a mapped branch, republish the debs built above as the
+  # single asset set of a per-train rolling prerelease (master-nightly /
+  # 26-nightly).
+  publish:
+    needs: test-build
+    if: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/stable/26') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    # Non-cancelling: serialise release writes per branch so a rapid second
+    # push can never tear a half-written release.
+    concurrency:
+      group: publish-debs-${{ github.ref }}
+      cancel-in-progress: false
+
+    steps:
+      - name: Download debs
+        uses: actions/download-artifact@v4
+        with:
+          name: truenas-scram-debs
+          path: truenas-scram-debs
+
+      - name: Assemble release assets
+        run: |
+          mkdir release-assets
+          cp truenas-scram-debs/*.deb release-assets/
+          echo "TRAIN=$(jq -r '.train' truenas-scram-debs/buildinfo.json)" >> "$GITHUB_ENV"
+          echo "SCRAM_VERSION=$(jq -r '.scram_version' truenas-scram-debs/buildinfo.json)" >> "$GITHUB_ENV"
+
+      - name: Generate checksums and manifest
+        run: |
+          cd release-assets
+          sha256sum *.deb > SHA256SUMS
+          ls *.deb | jq -R . | jq -s \
+            --arg branch "$GITHUB_REF_NAME" \
+            --arg commit "$GITHUB_SHA" \
+            --arg date "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --arg run_url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+            --arg scram_version "$SCRAM_VERSION" \
+            '{
+              branch: $branch,
+              commit: $commit,
+              date: $date,
+              run_url: $run_url,
+              scram_version: $scram_version,
+              debs: .
+            }' > manifest.json
+          cat manifest.json
+
+      - name: Publish rolling release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          # If the branch has already moved past this commit, let the run
+          # building the new tip publish instead - the release must never
+          # go back to an older deb.
+          tip=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/$GITHUB_REF_NAME" --jq .object.sha)
+          if [ "$tip" != "$GITHUB_SHA" ]; then
+            echo "$GITHUB_REF_NAME is now at $tip, not publishing $GITHUB_SHA"
+            exit 0
+          fi
+
+          tag="${TRAIN}-nightly"
+
+          {
+            echo "Rolling build of \`$GITHUB_REF_NAME\` at $GITHUB_SHA."
+            echo
+            echo "- truenas-scram version: \`$SCRAM_VERSION\`"
+            echo "- Build: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+            echo
+            echo "The tag and all assets are replaced on every push to"
+            echo "\`$GITHUB_REF_NAME\`. Fetch \`manifest.json\` to see what is"
+            echo "currently published and verify downloads against \`SHA256SUMS\`."
+          } > release-notes.md
+
+          gh release delete "$tag" --cleanup-tag --yes || true
+          gh api -X DELETE "repos/$GITHUB_REPOSITORY/git/refs/tags/$tag" 2>/dev/null || true
+          gh release create "$tag" \
+            --prerelease \
+            --target "$GITHUB_SHA" \
+            --title "TrueNAS $TRAIN truenas-scram debs (nightly)" \
+            --notes-file release-notes.md \
+            release-assets/*.deb \
+            release-assets/SHA256SUMS \
+            release-assets/manifest.json
