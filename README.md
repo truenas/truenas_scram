@@ -20,7 +20,7 @@ pip install -e .
 
 ### Prebuilt debs
 
-Every push to `master` and `stable/26` publishes the three debs
+Every push to a branch listed in `.github/trains.json` publishes the three debs
 (`libtruenas-scram1`, `libtruenas-scram-dev`, `python3-truenas-scram`) as a
 rolling per-train prerelease, so consuming repos can install them instead of
 rebuilding this project in their own CI runners:
@@ -29,6 +29,7 @@ rebuilding this project in their own CI runners:
 | ----------- | -------- | ---------------- |
 | `master`    | `master` | `master-nightly` |
 | `stable/26` | `26`     | `26-nightly`     |
+| `stable/27` | `27`     | `27-nightly`     |
 
 Assets live at stable, anonymously downloadable URLs:
 
