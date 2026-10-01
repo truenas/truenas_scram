@@ -8,17 +8,18 @@
 #
 # REF - branch name, e.g. master, stable/26, or a pull request base ref.
 #
-# Prints the train name (master or 26) on stdout.  This is the single
-# source of truth for the branch -> train mapping, and mirrors the
-# mapping used by the other TrueNAS repos publishing rolling debs
-# (truenas/zfs, truenas/linux, truenas/truenas_pylibzfs).
+# Prints REF's train from .github/trains.json, or default_train if REF
+# is not listed.
 ######################################################################
 
 set -eu
 
-REF="${1:-}"
-
-case "$REF" in
-  stable/26) echo "26" ;;
-  *)         echo "master" ;;
+resolve="$(dirname "$0")/resolve-train.py"
+rc=0
+entry=$("$resolve" branch "${1:-}") || rc=$?
+case $rc in
+  0) ;;
+  3) entry=$("$resolve" default) ;;  # not listed
+  *) exit "$rc" ;;                   # invalid config
 esac
+jq -r '.train' <<< "$entry"
